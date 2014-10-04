@@ -1,7 +1,7 @@
 %%
 %Read all Training Data. eg- T1C HG files
 trainData = [];
-for i=1:5%7
+for i=1:2%7
     filename = sprintf('BRATS_HG%.4d_T1.mha',i);
     info = mha_read_header(filename);
     intensityValues = mha_read_volume(info);
