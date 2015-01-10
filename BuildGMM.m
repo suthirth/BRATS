@@ -16,8 +16,8 @@ for i=1:2%4
     id = find(trainData(:,2) == i);
     labelData = double(trainData(id,1));
     CC_tumor(i,1) = mean(labelData);
-    CC_tumor(i,2) = cov(labelData);
-    CC_tumor(i,3) = size(id)/size(find(trainData(:,2) ~= 8));
+    CC_tumor(i,2) = var(labelData);
+    CC_tumor(i,3) = size(id,1)/size(find(trainData(:,2) ~= 8),1);
 end
 
 %K-Means to estimate initial for classes 5-7 
@@ -26,8 +26,8 @@ classData = double(trainData(find(trainData(:,2) == 0),1));
 for i=1:3
     id = find(IDX(:,1) == i);
     labelData = double(classData(id));
-    CC_normal(i,2) = cov(labelData);
-    CC_normal(i,3) = size(id)/size(find(trainData(:,2) ~= 8));
+    CC_normal(i,2) = var(labelData);
+    CC_normal(i,3) = size(id,1)/size(find(trainData(:,2) ~= 8),1);
 end
 
 model = [CC_tumor; CC_normal]
@@ -37,18 +37,18 @@ model = [CC_tumor; CC_normal]
 
 %Initialization
 brainData = double(trainData(find(trainData(:,2)~=8),1));
-gamma = zeros(size(brainData,1),7);
-J = zeros(size(brainData,1),7);
+gamma = zeros(size(brainData,1),5);
+J = zeros(size(brainData,1),5);
 for i=1:size(brainData,1)
     for j=1:5%7
-        J(i,j) = model(j,3) * ((2*pi)^(-0.5)) * (model(j,2)^-0.5) * exp(-((brainData(i)-model(j,1))^2)/(2*model(j,2)));
+        J(i,j) = model(j,3) * ((2*pi)^(-0.5)) * (model(j,2)^(-0.5)) * exp(-((brainData(i)-model(j,1))^2)/(2*model(j,2)));
     end
 end
-j_new = sum(log(sum(J,2)),1);
-j_old = j_new+1
+j_new = sum(log(sum(J,2)),1)
+j_old = j_new - 1000000
 
 %EM iterations
-while j_new < j_old
+while j_new - j_old > abs(10^-5 * j_old)
     j_old = j_new;
     %E Step
     for i=1:size(brainData,1)
