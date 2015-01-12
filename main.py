@@ -22,16 +22,28 @@ for f in trfiles:
 print 'files:'+ len(trfiles) + 'on dir' + trpath
 print 'data:' + np.shape(trdata[0])
 
-#build mask for all files
+#build mask and apply bias correction for all files
 otsufilter = itk.OtsuThresholdImageFilter[image_type, image_type].New()
+otsufilter.SetOutsideValue(255)
+otsufilter.SetInsideValue(0)
+
+n4filter = N4BiasFieldCorrectionImageFilter[image_type, image_type, image_type].New()
+
+maskeddata = []
 for data in trdata:
 	otsufilter.SetInput(data)
-	otsufilter.SetOutsideValue(255)
-	otsufilter.SetInsideValue(0)
 	otsufilter.Update()
-	print otsufilter.GetThreshold()
+	print 'Threshold value' + otsufilter.GetThreshold()
+	maskeddata.append(otsufilter.GetOutput())
+
+
+#mask 
 	
 #build neighborhood features
+
+itk_py_converter = itk.PyBuffer[image_type]
+arr = itk_py_converter.GetArrayFromImage(image)
+
 
 #
 
