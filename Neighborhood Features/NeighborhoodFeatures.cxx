@@ -4,6 +4,7 @@
 #include "itkConstNeighborhoodIterator.h"
 #include "itkImageRegionIterator.h"
 #include <stdio.h>
+#include <math.h>
 
 int main()
 {
@@ -26,22 +27,60 @@ int main()
 	radius.Fill(1);
 	NeighborhoodIterator it(radius, data, data->GetRequestedRegion());
 	
-	ImageType::Pointer output = ImageType::New();
-	output->SetRegions(data->GetRequestedRegion());
-	output->Allocate();
+	ImageType::Pointer ImageMean = ImageType::New();
+	ImageMean->SetRegions(data->GetRequestedRegion());
+	ImageMean->Allocate();
 
-	ImageIterator out(output,output->GetRequestedRegion());
+	ImageType::Pointer ImageStd = ImageType::New();
+	ImageStd->SetRegions(data->GetRequestedRegion());
+	ImageStd->Allocate();
 
-	for (it.GoToBegin(), out.GoToBegin(); !it.IsAtEnd(); ++it, ++out)
+	ImageType::Pointer ImageSkw = ImageType::New();
+	ImageSkw->SetRegions(data->GetRequestedRegion());
+	ImageSkw->Allocate();
+
+
+	ImageIterator out1(ImageMean,ImageMean->GetRequestedRegion());
+	ImageIterator out2(ImageStd,ImageStd->GetRequestedRegion());
+	ImageIterator out3(ImageSkw,ImageSkw->GetRequestedRegion());
+
+	float mean, std, skw;
+
+	for (it.GoToBegin(), out1.GoToBegin(), out2.GoToBegin(), out3.GoToBegin(); !it.IsAtEnd(); ++it, ++out1, ++out2, ++out3)
 	{
+		//Mean
 		float sum = 0.0;
 		for(unsigned int i = 0; i<it.Size(); ++i)
 			sum += it.GetPixel(i);
-		out.Set(sum/float(it.Size()));
+		mean = sum/float(it.Size());
+
+		//Std. Deviation
+		sum = 0.0;
+		for(unsigned int i = 0; i<it.Size(); ++i)
+			sum += pow(it.GetPixel(i) - mean,2);
+		std = sqrt(sum/float(it.Size()));
+
+		//Skewness
+		sum = 0.0;
+		for(unsigned int i = 0; i<it.Size(); ++i)
+			sum += pow((it.GetPixel(i) - mean)/std,3);
+		skw = sum/float(it.Size());
+
+		out1.Set(mean);
+		out2.Set(std);
+		out3.Set(skw);
 	}
 	
-	writer->SetInput(output);
+	writer->SetInput(ImageMean);
 	writer->SetFileName("/home/suthirth/Dataset/mean.mha");
+	writer->Update();
+
+	writer->SetInput(ImageStd);
+	writer->SetFileName("/home/suthirth/Dataset/std.mha");
+	writer->Update();
+
+	writer->SetInput(ImageSkw);
+	writer->SetFileName("/home/suthirth/Dataset/skw.mha");
 	writer->Update();
 
 	return 0;

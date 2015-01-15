@@ -19,6 +19,8 @@ itkImageRegionIterator.h
 /home/suthirth/BRATS/Neighborhood Features/itkImageRegionIterator.h
 stdio.h
 -
+math.h
+-
 
 /usr/local/include/ITK-4.5/ITKCommonExport.h
 
