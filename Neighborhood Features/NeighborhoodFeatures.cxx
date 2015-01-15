@@ -1,9 +1,9 @@
 /*
 Extract and save neighborhood features for mean, standard deviation and skewness of an image.
 Two sets of 3 images with radius 1 and 3. (3x3x3 region and 7x7x7 region)
-Input:  
-Output:
-
+Input: 3D File in ITK readable format.  
+Usage: NeighborhoodFeatures <FileDirectory/> <InputFileName> <OutputDirectory/>
+Output: Mean, Standard Deviation and Skewness calculated in neighborhood of radius 1 and 3. Files are saved in <OutputDirectory> with prefix.
 */
 
 #include "itkImage.h"
@@ -21,10 +21,8 @@ typedef itk::ImageFileWriter<ImageType> WriterType;
 typedef itk::ConstNeighborhoodIterator<ImageType> NeighborhoodIterator;
 typedef itk::ImageRegionIterator<ImageType> ImageIterator;
 
-void ExtractFeatures(ImageType::Pointer data, int r, char* filename, char* savepath)
+void ExtractFeatures(ImageType::Pointer data, int r, char* argv[])
 {
-
-	std::cout << filename;
 
 	//Extract Neighborhood features
 	NeighborhoodIterator::RadiusType radius;
@@ -79,20 +77,19 @@ void ExtractFeatures(ImageType::Pointer data, int r, char* filename, char* savep
 	char savefile[256];
 
 	writer->SetInput(ImageMean);
-	sprintf(savefile, "%smean_%d_%s",savepath,r,filename);
+	sprintf(savefile, "%smean_%d_%s",argv[3],r,argv[2]);
 	writer->SetFileName(savefile);
 	writer->Update();
 
 	writer->SetInput(ImageStd);
-	sprintf(savefile, "%sstd_%d_%s",savepath,r,filename);
+	sprintf(savefile, "%sstd_%d_%s",argv[3],r,argv[2]);
 	writer->SetFileName(savefile);
 	writer->Update();
 
 	writer->SetInput(ImageSkw);
-	sprintf(savefile, "%sskw_%d_%s",savepath,r,filename);
+	sprintf(savefile, "%sskw_%d_%s",argv[3],r,argv[2]);
 	writer->SetFileName(savefile);
 	writer->Update();
-
 }
 
 int main(int argc, char** argv)
@@ -103,18 +100,15 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	std::string filepath(argv[1]);
-	std::string filename(argv[2]); 
-
 	//Read file
 	ReaderType::Pointer reader = ReaderType::New();
-	reader->SetFileName(strcat(argv[1],argv[2]));
+	reader->SetFileName(std::string(argv[1]+std::string(argv[2])));
 	reader->Update();
 	ImageType::Pointer data = ImageType::New();
 	data = reader->GetOutput();
 
-	ExtractFeatures(data, 1, argv[2], argv[3]);
-	ExtractFeatures(data, 3, argv[2], argv[3]);
+	ExtractFeatures(data, 1, argv);
+	ExtractFeatures(data, 3, argv);
 
 	return 0;
 }
