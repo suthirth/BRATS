@@ -21,6 +21,8 @@ stdio.h
 -
 math.h
 -
+string.h
+-
 
 /usr/local/include/ITK-4.5/ITKCommonExport.h
 

@@ -1,3 +1,11 @@
+/*
+Extract and save neighborhood features for mean, standard deviation and skewness of an image.
+Two sets of 3 images with radius 1 and 3. (3x3x3 region and 7x7x7 region)
+Input:  
+Output:
+
+*/
+
 #include "itkImage.h"
 #include "itkImageFileReader.h"
 #include "itkImageFileWriter.h"
@@ -5,26 +13,22 @@
 #include "itkImageRegionIterator.h"
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 
-int main()
+typedef itk::Image<unsigned short, 3> ImageType;
+typedef itk::ImageFileReader<ImageType> ReaderType;
+typedef itk::ImageFileWriter<ImageType> WriterType;
+typedef itk::ConstNeighborhoodIterator<ImageType> NeighborhoodIterator;
+typedef itk::ImageRegionIterator<ImageType> ImageIterator;
+
+void ExtractFeatures(ImageType::Pointer data, int r, char* filename, char* savepath)
 {
-	typedef itk::Image<unsigned short, 3> ImageType;
-	typedef itk::ImageFileReader<ImageType> ReaderType;
-	typedef itk::ImageFileWriter<ImageType> WriterType;
-	typedef itk::ConstNeighborhoodIterator<ImageType> NeighborhoodIterator;
-	typedef itk::ImageRegionIterator<ImageType> ImageIterator;
 
-	//Read file
-	ReaderType::Pointer reader = ReaderType::New();
-	WriterType::Pointer writer = WriterType::New();
-	reader->SetFileName("/home/suthirth/Dataset/1.mha");
-	reader->Update();
-	ImageType::Pointer data = ImageType::New();
-	data = reader->GetOutput();
+	std::cout << filename;
 
-	//Neighborhood features of radius = 1
+	//Extract Neighborhood features
 	NeighborhoodIterator::RadiusType radius;
-	radius.Fill(1);
+	radius.Fill(r);
 	NeighborhoodIterator it(radius, data, data->GetRequestedRegion());
 	
 	ImageType::Pointer ImageMean = ImageType::New();
@@ -38,7 +42,6 @@ int main()
 	ImageType::Pointer ImageSkw = ImageType::New();
 	ImageSkw->SetRegions(data->GetRequestedRegion());
 	ImageSkw->Allocate();
-
 
 	ImageIterator out1(ImageMean,ImageMean->GetRequestedRegion());
 	ImageIterator out2(ImageStd,ImageStd->GetRequestedRegion());
@@ -71,17 +74,47 @@ int main()
 		out3.Set(skw);
 	}
 	
+	WriterType::Pointer writer = WriterType::New();
+
+	char savefile[256];
+
 	writer->SetInput(ImageMean);
-	writer->SetFileName("/home/suthirth/Dataset/mean.mha");
+	sprintf(savefile, "%smean_%d_%s",savepath,r,filename);
+	writer->SetFileName(savefile);
 	writer->Update();
 
 	writer->SetInput(ImageStd);
-	writer->SetFileName("/home/suthirth/Dataset/std.mha");
+	sprintf(savefile, "%sstd_%d_%s",savepath,r,filename);
+	writer->SetFileName(savefile);
 	writer->Update();
 
 	writer->SetInput(ImageSkw);
-	writer->SetFileName("/home/suthirth/Dataset/skw.mha");
+	sprintf(savefile, "%sskw_%d_%s",savepath,r,filename);
+	writer->SetFileName(savefile);
 	writer->Update();
+
+}
+
+int main(int argc, char** argv)
+{
+	if(argc != 4)
+	{
+		std::cout << "Invalid Command! Usage: NeighborhoodFeatures <FileDirectory/> <InputFileName> <OutputDirectory/>" << std::endl;
+		return -1;
+	}
+
+	std::string filepath(argv[1]);
+	std::string filename(argv[2]); 
+
+	//Read file
+	ReaderType::Pointer reader = ReaderType::New();
+	reader->SetFileName(strcat(argv[1],argv[2]));
+	reader->Update();
+	ImageType::Pointer data = ImageType::New();
+	data = reader->GetOutput();
+
+	ExtractFeatures(data, 1, argv[2], argv[3]);
+	ExtractFeatures(data, 3, argv[2], argv[3]);
 
 	return 0;
 }
