@@ -13,8 +13,12 @@ itkImageFileReader.h
 /home/suthirth/BRATS/Neighborhood Features/itkImageFileReader.h
 itkImageFileWriter.h
 /home/suthirth/BRATS/Neighborhood Features/itkImageFileWriter.h
-itkNeighborhoodIterator.h
-/home/suthirth/BRATS/Neighborhood Features/itkNeighborhoodIterator.h
+itkConstNeighborhoodIterator.h
+/home/suthirth/BRATS/Neighborhood Features/itkConstNeighborhoodIterator.h
+itkImageRegionIterator.h
+/home/suthirth/BRATS/Neighborhood Features/itkImageRegionIterator.h
+stdio.h
+-
 
 /usr/local/include/ITK-4.5/ITKCommonExport.h
 
@@ -1031,22 +1035,6 @@ itkImageBase.h
 /usr/local/include/ITK-4.5/itkNeighborhoodAllocator.h
 iostream
 -
-
-/usr/local/include/ITK-4.5/itkNeighborhoodIterator.h
-vector
--
-cstring
--
-iostream
--
-itkConstNeighborhoodIterator.h
-/usr/local/include/ITK-4.5/itkConstNeighborhoodIterator.h
-itkNeighborhoodIterator.hxx
-/usr/local/include/ITK-4.5/itkNeighborhoodIterator.hxx
-
-/usr/local/include/ITK-4.5/itkNeighborhoodIterator.hxx
-itkNeighborhoodIterator.h
-/usr/local/include/ITK-4.5/itkNeighborhoodIterator.h
 
 /usr/local/include/ITK-4.5/itkNumericTraits.h
 itkMacro.h

@@ -139,8 +139,6 @@ CMakeFiles/NeighborhoodFeatures.dir/NeighborhoodFeatures.cxx.o
  /usr/local/include/ITK-4.5/itkNeighborhood.hxx
  /usr/local/include/ITK-4.5/itkNeighborhoodAccessorFunctor.h
  /usr/local/include/ITK-4.5/itkNeighborhoodAllocator.h
- /usr/local/include/ITK-4.5/itkNeighborhoodIterator.h
- /usr/local/include/ITK-4.5/itkNeighborhoodIterator.hxx
  /usr/local/include/ITK-4.5/itkNumericTraits.h
  /usr/local/include/ITK-4.5/itkNumericTraitsArrayPixel.h
  /usr/local/include/ITK-4.5/itkNumericTraitsCovariantVectorPixel.h
