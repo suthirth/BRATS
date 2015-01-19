@@ -16,10 +16,11 @@ Output: Mean, Standard Deviation and Skewness calculated in neighborhood of radi
 #include <string.h>
 
 typedef itk::Image<unsigned short, 3> ImageType;
+typedef itk::Image<float, 3> FloatImageType;
 typedef itk::ImageFileReader<ImageType> ReaderType;
-typedef itk::ImageFileWriter<ImageType> WriterType;
+typedef itk::ImageFileWriter<FloatImageType> WriterType;
 typedef itk::ConstNeighborhoodIterator<ImageType> NeighborhoodIterator;
-typedef itk::ImageRegionIterator<ImageType> ImageIterator;
+typedef itk::ImageRegionIterator<FloatImageType> ImageIterator;
 
 void ExtractFeatures(ImageType::Pointer data, int r, char* argv[])
 {
@@ -29,25 +30,25 @@ void ExtractFeatures(ImageType::Pointer data, int r, char* argv[])
 	radius.Fill(r);
 	NeighborhoodIterator it(radius, data, data->GetRequestedRegion());
 	
-	ImageType::Pointer ImageMean = ImageType::New();
+	FloatImageType::Pointer ImageMean = FloatImageType::New();
 	ImageMean->SetRegions(data->GetRequestedRegion());
 	ImageMean->Allocate();
 
-	ImageType::Pointer ImageStd = ImageType::New();
+	FloatImageType::Pointer ImageStd = FloatImageType::New();
 	ImageStd->SetRegions(data->GetRequestedRegion());
 	ImageStd->Allocate();
 
-	ImageType::Pointer ImageSkw = ImageType::New();
+	FloatImageType::Pointer ImageSkw = FloatImageType::New();
 	ImageSkw->SetRegions(data->GetRequestedRegion());
 	ImageSkw->Allocate();
 
-	ImageIterator out1(ImageMean,ImageMean->GetRequestedRegion());
-	ImageIterator out2(ImageStd,ImageStd->GetRequestedRegion());
-	ImageIterator out3(ImageSkw,ImageSkw->GetRequestedRegion());
+	ImageIterator it1(ImageMean,ImageMean->GetRequestedRegion());
+	ImageIterator it2(ImageStd,ImageStd->GetRequestedRegion());
+	ImageIterator it3(ImageSkw,ImageSkw->GetRequestedRegion());
 
 	float mean, std, skw;
 
-	for (it.GoToBegin(), out1.GoToBegin(), out2.GoToBegin(), out3.GoToBegin(); !it.IsAtEnd(); ++it, ++out1, ++out2, ++out3)
+	for (it.GoToBegin(), it1.GoToBegin(), it2.GoToBegin(), it3.GoToBegin(); !it.IsAtEnd(); ++it, ++it1, ++it2, ++it3)
 	{
 		//Mean
 		float sum = 0.0;
@@ -67,11 +68,11 @@ void ExtractFeatures(ImageType::Pointer data, int r, char* argv[])
 			sum += pow((it.GetPixel(i) - mean)/std,3);
 		skw = sum/float(it.Size());
 
-		out1.Set(mean);
-		out2.Set(std);
-		out3.Set(skw);
+		it1.Set(mean);
+		it2.Set(std);
+		it3.Set(skw);
 	}
-	
+
 	WriterType::Pointer writer = WriterType::New();
 
 	char savefile[256];
