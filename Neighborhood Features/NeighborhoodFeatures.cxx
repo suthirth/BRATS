@@ -11,6 +11,7 @@ Output: Mean, Standard Deviation and Skewness calculated in neighborhood of radi
 #include "itkImageFileWriter.h"
 #include "itkConstNeighborhoodIterator.h"
 #include "itkImageRegionIterator.h"
+#include "itkDiscreteGaussianImageFilter.h"
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -21,6 +22,7 @@ typedef itk::ImageFileReader<ImageType> ReaderType;
 typedef itk::ImageFileWriter<FloatImageType> WriterType;
 typedef itk::ConstNeighborhoodIterator<ImageType> NeighborhoodIterator;
 typedef itk::ImageRegionIterator<FloatImageType> ImageIterator;
+typedef itk::DiscreteGaussianImageFilter<ImageType, FloatImageType> GaussianFilterType;
 
 void ExtractFeatures(ImageType::Pointer data, int r, char* argv[])
 {
@@ -42,14 +44,29 @@ void ExtractFeatures(ImageType::Pointer data, int r, char* argv[])
 	ImageSkw->SetRegions(data->GetRequestedRegion());
 	ImageSkw->Allocate();
 
+	FloatImageType::Pointer ImageKurt = FloatImageType::New();
+	ImageKurt->SetRegions(data->GetRequestedRegion());
+	ImageKurt->Allocate();
+
+	FloatImageType::Pointer ImageMax = FloatImageType::New();
+	ImageMax->SetRegions(data->GetRequestedRegion());
+	ImageMax->Allocate();
+
+	FloatImageType::Pointer ImageMin = FloatImageType::New();
+	ImageMin->SetRegions(data->GetRequestedRegion());
+	ImageMin->Allocate();
+
 	ImageIterator it1(ImageMean,ImageMean->GetRequestedRegion());
 	ImageIterator it2(ImageStd,ImageStd->GetRequestedRegion());
 	ImageIterator it3(ImageSkw,ImageSkw->GetRequestedRegion());
-
-	float mean, std, skw;
-
-	for (it.GoToBegin(), it1.GoToBegin(), it2.GoToBegin(), it3.GoToBegin(); !it.IsAtEnd(); ++it, ++it1, ++it2, ++it3)
+	ImageIterator it4(ImageKurt,ImageKurt->GetRequestedRegion());
+	ImageIterator it5(ImageMax,ImageMax->GetRequestedRegion());
+	ImageIterator it6(ImageMin,ImageMin->GetRequestedRegion());
+	
+	for (it.GoToBegin(), it1.GoToBegin(), it2.GoToBegin(), it3.GoToBegin(), it4.GoToBegin(), it5.GoToBegin(), it6.GoToBegin(); !it.IsAtEnd(); ++it, ++it1, ++it2, ++it3, ++it4, ++it5, ++it6)
 	{
+		float mean, std, skw, kurt;
+
 		//Mean
 		float sum = 0.0;
 		for(unsigned int i = 0; i<it.Size(); ++i)
@@ -64,13 +81,32 @@ void ExtractFeatures(ImageType::Pointer data, int r, char* argv[])
 
 		//Skewness
 		sum = 0.0;
+		float accum = 0.0;
 		for(unsigned int i = 0; i<it.Size(); ++i)
+		{
 			sum += pow((it.GetPixel(i) - mean)/std,3);
+			accum += pow((it.GetPixel(i) - mean)/std,4);
+		}	
 		skw = sum/float(it.Size());
+		kurt = accum/float(it.Size());
+
+		float max = it.GetPixel(0);
+		float min = it.GetPixel(0);
+		for(unsigned int i = 0; i<it.Size(); ++i)
+		{
+			if(it.GetPixel(i) > max)
+				max = it.GetPixel(i);
+			if(it.GetPixel(i) < min)
+				min = it.GetPixel(i);
+		}
 
 		it1.Set(mean);
 		it2.Set(std);
 		it3.Set(skw);
+		it4.Set(kurt);
+		it5.Set(max);
+		it6.Set(min);
+
 	}
 
 	WriterType::Pointer writer = WriterType::New();
@@ -91,6 +127,22 @@ void ExtractFeatures(ImageType::Pointer data, int r, char* argv[])
 	sprintf(savefile, "%sskw_%d_%s",argv[3],r,argv[2]);
 	writer->SetFileName(savefile);
 	writer->Update();
+
+	writer->SetInput(ImageKurt);
+	sprintf(savefile, "%skurt_%d_%s",argv[3],r,argv[2]);
+	writer->SetFileName(savefile);
+	writer->Update();
+
+	writer->SetInput(ImageMax);
+	sprintf(savefile, "%smax_%d_%s",argv[3],r,argv[2]);
+	writer->SetFileName(savefile);
+	writer->Update();
+
+	writer->SetInput(ImageMin);
+	sprintf(savefile, "%smin_%d_%s",argv[3],r,argv[2]);
+	writer->SetFileName(savefile);
+	writer->Update();
+
 }
 
 int main(int argc, char** argv)
@@ -110,6 +162,24 @@ int main(int argc, char** argv)
 
 	ExtractFeatures(data, 1, argv);
 	ExtractFeatures(data, 3, argv);
+
+	GaussianFilterType::Pointer gaussianFilter = GaussianFilterType::New();
+  	gaussianFilter->SetInput(data);
+  	gaussianFilter->SetVariance(3);
+
+	WriterType::Pointer writer = WriterType::New();
+	char savefile[256];
+
+	writer->SetInput(gaussianFilter->GetOutput());
+	sprintf(savefile, "%sgauss_%d_%s",argv[3],3,argv[2]);
+	writer->SetFileName(savefile);
+	writer->Update();  	
+
+	gaussianFilter->SetVariance(7);
+	writer->SetInput(gaussianFilter->GetOutput());
+	sprintf(savefile, "%sgauss_%d_%s",argv[3],7,argv[2]);
+	writer->SetFileName(savefile);
+	writer->Update();  	
 
 	return 0;
 }
