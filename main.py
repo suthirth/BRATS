@@ -2,7 +2,7 @@ import itk
 import os
 
 #initialize ITK
-image_type = itk.Image[itk.UC,3]
+image_type = itk.Image[itk.US,3]
 reader = itk.ImageFileReader[image_type].New()
 writer = itk.ImageFileWriter[image_type].New()
 
@@ -23,6 +23,7 @@ otsufilter = itk.OtsuThresholdImageFilter[image_type, image_type].New()
 otsufilter.SetOutsideValue(1)
 otsufilter.SetInsideValue(0)
 
+n4filter = itk.N4BiasFieldCorrectionImageFilter[image_type, image_type, image_type].New()
 maskeddata = []
 for data in trdata:
 	otsufilter.SetInput(data)
@@ -37,7 +38,6 @@ for data in trdata:
 
 itk_py_converter = itk.PyBuffer[image_type]
 arr = itk_py_converter.GetArrayFromImage(image)
-
 
 #
 
