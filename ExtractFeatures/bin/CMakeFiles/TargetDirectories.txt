@@ -1,1 +1,1 @@
-/home/suthirth/BRATS/ExtractFeatures/bin/CMakeFiles/ExtractFeatures.dir
+/home/brats/BRATS/ExtractFeatures/bin/CMakeFiles/ExtractFeatures.dir

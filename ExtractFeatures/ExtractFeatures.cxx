@@ -7,6 +7,8 @@ Usage: ExtractFeatures <FileDirectory/> <InputFileName> <OutputDirectory/>
 Output: Files are saved in <OutputDirectory> with prefix.
 */
 
+//TODO: Multi-threading enable
+
 #include "itkImage.h"
 #include "itkImageFileReader.h"
 #include "itkImageFileWriter.h"
@@ -64,25 +66,22 @@ void NeighborhoodFeatures(ImageType::Pointer data, int r, char* argv[])
 	ImageIterator it5(ImageMax,ImageMax->GetRequestedRegion());
 	ImageIterator it6(ImageMin,ImageMin->GetRequestedRegion());
 	
+	float mean, std, skw, kurt, sum=0.0, accum=0.0, max, min;
+	
 	for (it.GoToBegin(), it1.GoToBegin(), it2.GoToBegin(), it3.GoToBegin(), it4.GoToBegin(), it5.GoToBegin(), it6.GoToBegin(); !it.IsAtEnd(); ++it, ++it1, ++it2, ++it3, ++it4, ++it5, ++it6)
-	{
-		float mean, std, skw, kurt;
-
-		//Mean
-		float sum = 0.0;
+	{	
+		sum = 0.0;
 		for(unsigned int i = 0; i<it.Size(); ++i)
 			sum += it.GetPixel(i);
 		mean = sum/float(it.Size());
 
-		//Std. Deviation
 		sum = 0.0;
 		for(unsigned int i = 0; i<it.Size(); ++i)
 			sum += pow(it.GetPixel(i) - mean,2);
 		std = sqrt(sum/float(it.Size()));
-
-		//Skewness
-		sum = 0.0;
-		float accum = 0.0;
+	
+		sum=0.0;
+		accum=0.0;
 		for(unsigned int i = 0; i<it.Size(); ++i)
 		{
 			sum += pow((it.GetPixel(i) - mean)/std,3);
@@ -91,8 +90,13 @@ void NeighborhoodFeatures(ImageType::Pointer data, int r, char* argv[])
 		skw = sum/float(it.Size());
 		kurt = accum/float(it.Size());
 
-		float max = it.GetPixel(0);
-		float min = it.GetPixel(0);
+		it1.Set(mean);
+		it2.Set(std);
+		it3.Set(skw);
+		it4.Set(kurt);
+
+		max = it.GetPixel(0);
+		min = it.GetPixel(0);
 		for(unsigned int i = 0; i<it.Size(); ++i)
 		{
 			if(it.GetPixel(i) > max)
@@ -101,10 +105,6 @@ void NeighborhoodFeatures(ImageType::Pointer data, int r, char* argv[])
 				min = it.GetPixel(i);
 		}
 
-		it1.Set(mean);
-		it2.Set(std);
-		it3.Set(skw);
-		it4.Set(kurt);
 		it5.Set(max);
 		it6.Set(min);
 
@@ -155,6 +155,8 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
+	std::cout << "Extracting Features for " << argv[1] << " from " << argv[2] << std::endl;
+
 	//Read file
 	ReaderType::Pointer reader = ReaderType::New();
 	reader->SetFileName(std::string(argv[1]+std::string(argv[2])));
@@ -162,9 +164,16 @@ int main(int argc, char** argv)
 	ImageType::Pointer data = ImageType::New();
 	data = reader->GetOutput();
 
-	NeighborhoodFeatures(data, 1, argv);
-	NeighborhoodFeatures(data, 3, argv);
+	#pragma omp parallel sections
+	{
+		#pragma omp section
+		NeighborhoodFeatures(data, 1, argv);
+		
+		#pragma omp section
+		NeighborhoodFeatures(data, 3, argv);
 
+	}
+	
 	GaussianFilterType::Pointer gaussianFilter = GaussianFilterType::New();
   	gaussianFilter->SetInput(data);
   	gaussianFilter->SetVariance(3);
@@ -182,6 +191,8 @@ int main(int argc, char** argv)
 	sprintf(savefile, "%sgauss_%d_%s",argv[3],7,argv[2]);
 	writer->SetFileName(savefile);
 	writer->Update();  	
+
+	std::cout << "Saving Features for " << argv[1] << " at " << argv[3] << std::endl;
 
 	return 0;
 }
