@@ -1,8 +1,4 @@
-import itk
 import os
-
-image_type = itk.Image[itk.F,3]
-reader = itk.ImageFileReader[image_type].New()
 
 BRATSLIB_PATH = '/home/brats/BRATS/'
 
