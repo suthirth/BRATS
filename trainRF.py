@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.externals import joblib
 
-image_type = itk.Image[itk.F,3]
+image_type = itk.Image[itk.US,3]
 reader = itk.ImageFileReader[image_type].New()
 itk_py_converter = itk.PyBuffer[image_type]
 
@@ -14,14 +14,14 @@ path, patients, files = os.walk(path).next()
 
 #Create output array
 print 'Creating truth array...'
-truth = np.zeros((155*240*240*len(patients),1))
-for p in range(1:len(patients)):
+truth = np.zeros(155*240*240*len(patients))
+for p in range(1,len(patients)):
 	truthfile = os.listdir(truthpath+'/'+patients[p])
 	reader.SetFileName(truthpath+'/'+patients[p]+'/'+truthfile[0])
 	reader.Update()
 	arr = np.array(itk_py_converter.GetArrayFromImage(reader.GetOutput()))
 	arr = np.reshape(arr,155*240*240)
-	truth[155*240*240*(p-1):155*240*240*p,0] = arr
+	truth[155*240*240*(p-1):155*240*240*p] = arr
 print 'Truth array - done!'
 
 seqindex = dict()
@@ -37,19 +37,23 @@ featureindex = {'gauss_3':1,'gauss_7':2,'kurt_1':3,'kurt_3':4,'max_1':5,'max_3':
 #Create feature array
 print 'Creating feature array...'
 features = np.zeros((155*240*240*len(patients),60))
-for p in range(1:len(patients)):
+for p in range(1,len(patients)):
+	print 'Adding features of:', patients[p], '(',p,'/',len(patients),')' 
 	seqfiles = os.listdir(path+'/'+patients[p])
 	for s in seqfiles:
-		reader.SetFileName(path+'/'+patients[p]+'/'+s)
-		reader.Update()
-		arr = np.array(itk_py_converter.GetArrayFromImage(reader.GetOutput()))
-		arr = np.reshape(arr,155*240*240)
-		for si in seqindex:
-			if si in s:
-				features[155*240*240*(p-1):155*240*240*p,seqindex[si]] = arr
+		if s!='Features':
+			print path+'/'+patients[p]+'/'+s
+			reader.SetFileName(path+'/'+patients[p]+'/'+s)
+			reader.Update()
+			arr = np.array(itk_py_converter.GetArrayFromImage(reader.GetOutput()))
+			arr = np.reshape(arr,155*240*240)
+			for si in seqindex:
+				if si in s:
+					features[155*240*240*(p-1):155*240*240*p,seqindex[si]] = arr
 
 	featurefiles = os.listdir(path+'/'+patients[p]+'/Features')
 	for f in featurefiles:
+		print path+'/'+patients[p]+'/Features/'+f
 		reader.SetFileName(path+'/'+patients[p]+'/Features/'+f)
 		reader.Update()
 		arr = np.array(itk_py_converter.GetArrayFromImage(reader.GetOutput()))
@@ -63,8 +67,8 @@ for p in range(1:len(patients)):
 print 'Feature array - done!'
 
 print 'Creating Random Forest model...'
-rf = RandomForestClassifier(n_estimators = 200);
-rf.fit(,Y)
+rf = RandomForestClassifier(n_estimators = 10);
+rf.fit(features,truth)
 
 joblib.dump(rf, 'randomforest.pkl') 
 print 'RF done! Saved.'
