@@ -1,9 +1,12 @@
 import os
-import sklearn
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.externals import joblib
 import itk
+import numpy as np
 
+image_type = itk.Image[itk.US,3]
+reader = itk.ImageFileReader[image_type].New()
+itk_py_converter = itk.PyBuffer[image_type]
 path = '/Dataset/brats_tcia_pat105_1'
 
 seqindex = {'T1.':0,'T1C':1,'T2':2,'Flair':3}
@@ -14,7 +17,7 @@ print 'Building feature array'
 seqfiles = os.listdir(path)
 for s in seqfiles:
 		if s!='Features':
-			reader.SetFileName(path+'/'+patients[p]+'/'+s)
+			reader.SetFileName(path+'/'+s)
 			reader.Update()
 			arr = np.array(itk_py_converter.GetArrayFromImage(reader.GetOutput()))
 			arr = np.reshape(arr,155*240*240)
@@ -35,7 +38,10 @@ for f in featurefiles:
 				if fi in f:
 					features[0:155*240*240,3+14*seqindex[si]+featureindex[fi]] = arr
 
+print 'Loading RF...'
 rf = joblib.load('/RF/randomforest.pkl')
+print 'Prediction in progress...'
 pred = rf.predict(features)
-
 x = pred.reshape(155,240,240)
+print 'Saving...'
+np.savetxt('rfoutput.txt',x[78])
