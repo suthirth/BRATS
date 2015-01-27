@@ -12,15 +12,17 @@ path = '/Dataset/'
 truthpath = '/Truth'
 path, patients, files = os.walk(path).next()
 
-
+#Create output array
+truth = []
 for p in patients:
-	truthfiles = os.listdir(truthpath+'/'+p)
-	for t in truthfiles:
-		reader.SetFileName(truthpath+'/'+p+'/'+t)
-		reader.Update()
-		arr = np.array(itk_py_converter.GetArrayFromImage(reader.GetOutput()))
-		arr = np.reshape(arr,155*240*240)
-		np.append(Y,arr)
+	truthfile = os.listdir(truthpath+'/'+p)
+	reader.SetFileName(truthpath+'/'+p+'/'+truthfile[0])
+	reader.Update()
+	arr = np.array(itk_py_converter.GetArrayFromImage(reader.GetOutput()))
+	arr = np.reshape(arr,155*240*240)
+	truth.append(arr)
+Y = np.array(truth)
+
 
 	featurefiles = os.listdir(path+'/'+p+'/Features')
 	for f in featurefiles:
