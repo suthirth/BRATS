@@ -8,7 +8,7 @@ image_type = itk.Image[itk.US,3]
 reader = itk.ImageFileReader[image_type].New()
 writer = itk.ImageFileWriter[image_type].New()
 itk_py_converter = itk.PyBuffer[image_type]
-path = '/Test/brats_tcia_pat138_1'
+path = '/Test/brats_tcia_pat215_1'
 
 seqindex = {'T1.':0,'T1C':1,'T2':2,'Flair':3}
 featureindex = {'gauss_3':1,'gauss_7':2,'kurt_1':3,'kurt_3':4,'max_1':5,'max_3':6,'mean_1':7,'mean_3':8,'min_1':9,'min_3':10,'skw_1':11,'skw_3':12,'std_1':13,'std_3':14} 
@@ -45,8 +45,8 @@ print 'Prediction in progress...'
 pred = rf.predict(features)
 x = pred.reshape(155,240,240)
 print 'Saving...'
-output_image = itk_py_converter.GetImageFromArray(x)
-writer.SetFileName('/RF/RFprediction.mha')
+output_image = itk_py_converter.GetImageFromArray(x.tolist())
+writer.SetFileName('/RF/RFprediction_215_1.mha')
 writer.SetInput(output_image)
 writer.Update()
 #np.savetxt('rfoutput.txt',x[78])

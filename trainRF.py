@@ -67,7 +67,7 @@ for p in range(0,len(patients)):
 print 'Feature array - done!'
 
 print 'Creating Random Forest model...'
-rf = RandomForestClassifier(n_estimators = 10);
+rf = RandomForestClassifier(n_estimators = 10, n_jobs=-1, oob_score=True);
 rf.fit(features,truth)
 
 joblib.dump(rf, '/RF/randomforest.pkl') 
