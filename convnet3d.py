@@ -15,7 +15,7 @@ class ConvPoolLayer(object):
                 W_bound = numpy.sqrt(6. / (fan_in + fan_out))
                 self.W = theano.shared(
                     numpy.asarray(
-                        rng.uniform(low=-W_bound, high=W_bound, size=filter_shape),
+                        rng.uniform(low=-W_bound, high=W_bound, size=[filter_shape[i] for i in [0,2,1,3,4]]),
                         dtype=theano.config.floatX
                     ),
                     borrow=True
@@ -29,8 +29,10 @@ class ConvPoolLayer(object):
                     filters_shape=[filter_shape[i] for i in [0,2,1,3,4]],
                     border_mode = 'valid'          
                 ).dimshuffle([0,2,1,3,4])
+                print input.type
+                conv_out += self.b.dimshuffle('x',0,'x','x','x')
 
                 pooled_out = max_pool_3d(input = conv_out,ds = pool_size, ignore_border = True)
 
-                self.output = T.tanh(pooled_out + self.b.dimshuffle('x', 0, 'x', 'x'))
+                self.output = T.tanh(pooled_out)
                 self.params = [self.W, self.b]

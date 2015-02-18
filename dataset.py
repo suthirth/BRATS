@@ -13,9 +13,10 @@ from mlp import HiddenLayer
 from logistic_sgd import *
 
 learning_rate = 0.1
+n_epochs = 200
 rng = numpy.random.RandomState(23455)
 
-x = T.matrix('x')
+x = T.ftensor3('x')
 y = T.ivector('y')
 
 layer0_input = x.reshape([37,4,31,31,31])
@@ -118,7 +119,7 @@ while(epoch < n_epochs) and (not done_looping):
 				batch[k/4-4] = numpy.array(combine)
 			costij = train_model(batch,label)
 
-			if (itr + 1) % valiidation_frequency == 0:
+			if (itr + 1) % validation_frequency == 0:
 				# find validation loss
 
 				if this_validation_loss < best_validation_loss:
