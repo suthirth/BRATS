@@ -19,180 +19,152 @@ Output: Files are saved in <OutputDirectory> with prefix.
 #include <math.h>
 #include <string.h>
 
-typedef itk::Image<unsigned short, 3> ImageType;
-typedef itk::Image<float, 3> FloatImageType;
+typedef itk::Image<float, 3> ImageType;
 typedef itk::ImageFileReader<ImageType> ReaderType;
-typedef itk::ImageFileWriter<FloatImageType> WriterType;
+typedef itk::ImageFileWriter<ImageType> WriterType;
 typedef itk::ConstNeighborhoodIterator<ImageType> NeighborhoodIterator;
-typedef itk::ImageRegionIterator<FloatImageType> ImageIterator;
-typedef itk::DiscreteGaussianImageFilter<ImageType, FloatImageType> GaussianFilterType;
+typedef itk::ImageRegionIterator<ImageType> ImageIterator;
+typedef itk::DiscreteGaussianImageFilter<ImageType, ImageType> GaussianFilterType;
 
-void NeighborhoodFeatures(ImageType::Pointer data, int r, char* argv[])
+ImageType::Pointer MakeImage(ImageType::Pointer Im)
 {
+	ImageType::Pointer NewIm = ImageType::New();
+	NewIm->SetRegions(Im->GetRequestedRegion());
+	NewIm->Allocate();
+	return NewIm;
+}
+
+void NeighborhoodFeatures(ImageType::Pointer data, int r, char* f)
+{
+	char* idx[6] = {"mean","std","skw","kurt","max","min"};
 
 	//Extract Neighborhood features
 	NeighborhoodIterator::RadiusType radius;
 	radius.Fill(r);
 	NeighborhoodIterator it(radius, data, data->GetRequestedRegion());
-	
-	FloatImageType::Pointer ImageMean = FloatImageType::New();
-	ImageMean->SetRegions(data->GetRequestedRegion());
-	ImageMean->Allocate();
-
-	FloatImageType::Pointer ImageStd = FloatImageType::New();
-	ImageStd->SetRegions(data->GetRequestedRegion());
-	ImageStd->Allocate();
-
-	FloatImageType::Pointer ImageSkw = FloatImageType::New();
-	ImageSkw->SetRegions(data->GetRequestedRegion());
-	ImageSkw->Allocate();
-
-	FloatImageType::Pointer ImageKurt = FloatImageType::New();
-	ImageKurt->SetRegions(data->GetRequestedRegion());
-	ImageKurt->Allocate();
-
-	FloatImageType::Pointer ImageMax = FloatImageType::New();
-	ImageMax->SetRegions(data->GetRequestedRegion());
-	ImageMax->Allocate();
-
-	FloatImageType::Pointer ImageMin = FloatImageType::New();
-	ImageMin->SetRegions(data->GetRequestedRegion());
-	ImageMin->Allocate();
-
-	ImageIterator it1(ImageMean,ImageMean->GetRequestedRegion());
-	ImageIterator it2(ImageStd,ImageStd->GetRequestedRegion());
-	ImageIterator it3(ImageSkw,ImageSkw->GetRequestedRegion());
-	ImageIterator it4(ImageKurt,ImageKurt->GetRequestedRegion());
-	ImageIterator it5(ImageMax,ImageMax->GetRequestedRegion());
-	ImageIterator it6(ImageMin,ImageMin->GetRequestedRegion());
-	
-	float mean, std, skw, kurt, sum=0.0, accum=0.0, max, min;
-	
-	for (it.GoToBegin(), it1.GoToBegin(), it2.GoToBegin(), it3.GoToBegin(), it4.GoToBegin(), it5.GoToBegin(), it6.GoToBegin(); !it.IsAtEnd(); ++it, ++it1, ++it2, ++it3, ++it4, ++it5, ++it6)
-	{	
-		sum = 0.0;
-		for(unsigned int i = 0; i<it.Size(); ++i)
-			sum += it.GetPixel(i);
-		mean = sum/float(it.Size());
-
-		sum = 0.0;
-		for(unsigned int i = 0; i<it.Size(); ++i)
-			sum += pow(it.GetPixel(i) - mean,2);
-		std = sqrt(sum/float(it.Size()));
-	
-		sum=0.0;
-		accum=0.0;
-		for(unsigned int i = 0; i<it.Size(); ++i)
-		{
-			sum += pow((it.GetPixel(i) - mean)/std,3);
-			accum += pow((it.GetPixel(i) - mean)/std,4);
-		}	
-		skw = sum/float(it.Size());
-		kurt = accum/float(it.Size());
-
-		it1.Set(mean);
-		it2.Set(std);
-		it3.Set(skw);
-		it4.Set(kurt);
-
-		max = it.GetPixel(0);
-		min = it.GetPixel(0);
-		for(unsigned int i = 0; i<it.Size(); ++i)
-		{
-			if(it.GetPixel(i) > max)
-				max = it.GetPixel(i);
-			if(it.GetPixel(i) < min)
-				min = it.GetPixel(i);
-		}
-
-		it5.Set(max);
-		it6.Set(min);
-
-	}
 
 	WriterType::Pointer writer = WriterType::New();
+	
+	for (int stat=1; stat<=6; stat++)
+	{
+		ImageType::Pointer Im = MakeImage(data);
+		ImageIterator it1(Im, Im->GetRequestedRegion());	
+		float sum = 0.0;
+		float mean, max, min;
 
-	char savefile[256];
+		for (it.GoToBegin(), it1.GoToBegin();!it.IsAtEnd();++it, ++it1)
+		{
+			switch (stat)
+			{
+				case 1: //Mean
+					for (int i=0; i<it.Size(); ++i)
+						sum += it.GetPixel(i);
+					it1.Set(sum/float(it.Size()));
+					break;
 
-	writer->SetInput(ImageMean);
-	sprintf(savefile, "%smean_%d_%s",argv[3],r,argv[2]);
+				case 2: //Std
+					for (int i=0; i<it.Size(); ++i)
+						sum += it.GetPixel(i);
+					mean = sum/float(it.Size());
+
+					for(int i = 0; i<it.Size(); ++i)
+						sum += pow(it.GetPixel(i) - mean,2);
+					it1.Set(sqrt(sum/float(it.Size())));
+					break;
+
+				case 3: // Skewness
+					for (int i=0; i<it.Size(); ++i)
+						sum += it.GetPixel(i);
+					mean = sum/float(it.Size());
+					
+					for(int i = 0; i<it.Size(); ++i)
+						sum += pow((it.GetPixel(i) - mean)/std,3);				
+					it1.Set(sum/float(it.Size()));
+					break;
+					
+				case 4: // Kurtosis
+					for (int i=0; i<it.Size(); ++i)
+						sum += it.GetPixel(i);
+					mean = sum/float(it.Size());
+					
+					for(int i = 0; i<it.Size(); ++i)
+						sum += pow((it.GetPixel(i) - mean)/std,4);				
+					it1.Set(sum/float(it.Size()));
+					break;
+					
+				case 5: //Max
+					max = it.GetPixel(0);
+					for(int i = 0; i<it.Size(); ++i)
+						if(it.GetPixel(i) > max)
+							max = it.GetPixel(i);		
+					it1.Set(max);
+					break;
+					
+				case 6: //Min
+					min = it.GetPixel(0);
+					for(int i = 0; i<it.Size(); ++i)
+						if(it.GetPixel(i) < min)
+							min = it.GetPixel(i);		
+					it1.Set(min);
+					break;
+					
+			}
+		}
+
+		char savefile[256];
+		sprintf(savefile, "%s_%s_%d.nii.gz",f,idx[(stat-1)],r);
+		
+		writer->SetInput(Im);
+		writer->SetFileName(savefile);
+		writer->Update();	
+
+	}
+}
+
+void Gauss(ImageType::Pointer data, int r, char* f)
+{
+	GaussianFilterType::Pointer gaussianFilter = GaussianFilterType::New();
+  	gaussianFilter->SetInput(data);
+  	gaussianFilter->SetVariance(r);
+
+  	WriterType::Pointer writer = WriterType::New();
+  	char savefile[256];
+	sprintf(savefile, "%s_gauss_%d.nii.gz",f,r);
+
+	writer->SetInput(gaussianFilter->GetOutput());
 	writer->SetFileName(savefile);
-	writer->Update();
-
-	writer->SetInput(ImageStd);
-	sprintf(savefile, "%sstd_%d_%s",argv[3],r,argv[2]);
-	writer->SetFileName(savefile);
-	writer->Update();
-
-	writer->SetInput(ImageSkw);
-	sprintf(savefile, "%sskw_%d_%s",argv[3],r,argv[2]);
-	writer->SetFileName(savefile);
-	writer->Update();
-
-	writer->SetInput(ImageKurt);
-	sprintf(savefile, "%skurt_%d_%s",argv[3],r,argv[2]);
-	writer->SetFileName(savefile);
-	writer->Update();
-
-	writer->SetInput(ImageMax);
-	sprintf(savefile, "%smax_%d_%s",argv[3],r,argv[2]);
-	writer->SetFileName(savefile);
-	writer->Update();
-
-	writer->SetInput(ImageMin);
-	sprintf(savefile, "%smin_%d_%s",argv[3],r,argv[2]);
-	writer->SetFileName(savefile);
-	writer->Update();
+	writer->Update();	
 
 }
 
 int main(int argc, char** argv)
 {
-	if(argc != 4)
+	
+	//Usage 
+	if(argc != 6)
 	{
 		std::cerr << "Usage" <<std::endl;
-		std::cerr << argv[0] << " <FileDirectory/> <InputFileName> <OutputDirectory/>" << std::endl;
+		std::cerr << argv[0] << "<Output_Prefix> <T1_Image> <T1C_Image> <T2_Image> <FLAIR_Image>" << std::endl;
 		return -1;
 	}
 
-	std::cout << "Extracting Features for " << argv[1] << " from " << argv[2] << std::endl;
+	std::cout << "Extracting Features for " << argv[2] << argv[3] << argv[4] << argv[5] << std::endl;
 
-	//Read file
+	//Read files
 	ReaderType::Pointer reader = ReaderType::New();
-	reader->SetFileName(std::string(argv[1]+std::string(argv[2])));
-	reader->Update();
 	ImageType::Pointer data = ImageType::New();
-	data = reader->GetOutput();
 
-	#pragma omp parallel sections
+	//Extract sequence specific features
+	for (int i = 2; i <= 5; i++)
 	{
-		#pragma omp section
-		NeighborhoodFeatures(data, 1, argv);
-		
-		#pragma omp section
-		NeighborhoodFeatures(data, 3, argv);
-
+		reader->SetFileName(argv[i]);
+		reader->Update();
+		data = reader->GetOutput();
+		NeighborhoodFeatures(data, 1, argv[i]);
+		NeighborhoodFeatures(data, 3, argv[i]);
+		Gauss(data, 3, argv[i]);
+		Gauss(data, 7, argv[i]);
 	}
 	
-	GaussianFilterType::Pointer gaussianFilter = GaussianFilterType::New();
-  	gaussianFilter->SetInput(data);
-  	gaussianFilter->SetVariance(3);
-
-	WriterType::Pointer writer = WriterType::New();
-	char savefile[256];
-
-	writer->SetInput(gaussianFilter->GetOutput());
-	sprintf(savefile, "%sgauss_%d_%s",argv[3],3,argv[2]);
-	writer->SetFileName(savefile);
-	writer->Update();  	
-
-	gaussianFilter->SetVariance(7);
-	writer->SetInput(gaussianFilter->GetOutput());
-	sprintf(savefile, "%sgauss_%d_%s",argv[3],7,argv[2]);
-	writer->SetFileName(savefile);
-	writer->Update();  	
-
-	std::cout << "Saving Features for " << argv[1] << " at " << argv[3] << std::endl;
-
 	return 0;
 }
