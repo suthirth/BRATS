@@ -23,6 +23,8 @@ for p in patients:
             print i
             os.system(ANTSPATH+'ImageMath 3 '+mask_file+' Normalize '+input_path+'/'+p+'/'+i)
             os.system(ANTSPATH+'ThresholdImage 3 '+mask_file+' '+mask_file+' 0.1 1')
+            os.system(ANTSPATH+'ImageMath 3 '+mask_file+' MD '+mask_file+' 5')
+            os.system(ANTSPATH+'ImageMath 3 '+mask_file+' ME '+mask_file+' 5')
 
     #Intensity normalisation and/or N4 Bias
     for i in imgs:
