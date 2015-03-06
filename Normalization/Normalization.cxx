@@ -1,7 +1,5 @@
 /*
-N4ITK Bias Correction 
-Bias Field Correction for MRI Images using N4ITK
-N4ITK: Nick’s N3 ITK Implementation For MRI Bias Field Correction (Nicholas J. Tustison and James C. Gee)
+Normalization
 
 Input: 3D MRI Image
 Usage: N4Bias <FileDirectory/> <InputFileName> <OutputDirectory/>
