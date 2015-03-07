@@ -47,7 +47,7 @@ for p in patients:
 
                     os.system(ANTSPATH+'antsApplyTransforms -d 3 -i '+pr_input+' -o '+pr_output+' -r '+input_file+' -t '+reg_file+'1Warp.nii.gz -t '+reg_file+'0GenericAffine.mat -n BSpline')
 
-                os.system('bash '+ANTSPATH+'antsAtroposN4.sh -d 3 -a '+input_file+' -x '+mask_file+' -c 6 -p '+output_base+'priors%d.nii.gz -o '+atropos_file+' w 0.25')
+                os.system('bash '+ANTSPATH+'antsAtroposN4.sh -d 3 -a '+input_file+' -x '+mask_file+' -c 6 -p '+output_base+'priors%d.nii.gz -o '+atropos_file+' -w 0.25')
 
                 #Locate Truth File and merge
                 norm_files = os.listdir(norm_path+'/'+p+'/'+t+'/')
