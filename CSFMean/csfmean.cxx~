@@ -18,7 +18,7 @@ int main(int argc, char** argv)
 	if(argc < 4)
 	{
 		std::cerr << "Usage" <<std::endl;
-		std::cerr << argv[0] << " <InputFile> <LabelFile> <CSF Label Value> <PrintCount>" << std::endl;
+		std::cerr << argv[0] << " <InputFile> <LabelFile> <CSF Label Value>" << std::endl;
 		return -1;
 	}
 
@@ -58,9 +58,6 @@ int main(int argc, char** argv)
     	avg = sum/float(count);
     	std::cout << avg << std::endl;
 	}
-	
-	if (atoi(argv[4]) == 1)
-		std::cout << "Count:" << count << std::endl;
-	
+
 	return 0;
 }
