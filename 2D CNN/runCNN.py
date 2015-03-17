@@ -93,9 +93,10 @@ layer3 = LogisticRegression(input=layer2.output, n_in=nkerns[2], n_out=nkerns[3]
 
 cost = layer3.negative_log_likelihood(y)
 
-test_model = theano.function([], layer3.y_pred, givens={ x: shared_data})
+test_model = theano.function([nz], layer3.y_pred, givens={ x: shared_data[nz*num_patches:(nz+1)*num_patches,:,:,:]})
 
-validate_model = theano.function([], layer3.errors(y), givens={x: shared_data, y: shared_truth})
+validate_model = theano.function([nz], layer3.errors(y), givens={x: shared_data[nz*num_patches:(nz+1)*num_patches,:,:,:], 
+                                                                y: shared_truth[nz*num_patches:(nz+1)*num_patches]})
 
 params = layer3.params + layer2.params + layer1.params + layer0.params
 
@@ -103,7 +104,8 @@ grads = T.grad(cost, params)
 
 updates = [(param_i, param_i - learning_rate * grad_i) for param_i, grad_i in zip(params, grads)]
 
-train_model = theano.function([], cost, updates=updates, givens={ x: shared_data, y: shared_truth})
+train_model = theano.function([nz], cost, updates=updates, givens={ x: shared_data[nz*num_patches:(nz+1)*num_patches,:,:,:], 
+                                                                    y: shared_truth[nz*num_patches:(nz+1)*num_patches]})
 
 # TRAIN MODEL #
 ###############
@@ -124,6 +126,7 @@ epoch = 0
 done_looping = False
 
 logcost = []
+
 while (epoch < n_epochs) and (not done_looping):
     epoch = epoch + 1
     iter = 0
@@ -139,30 +142,37 @@ while (epoch < n_epochs) and (not done_looping):
             
             z = 0
 
-            while z < 30*int(img_shape[2]/30):
+            slice_batch = 10
+
+            while z < slice_batch*int(img_shape[2]/slice_batch):
+
+                train_patches = []
 
                 print "... preparing patches"
 
-                train_patches0 = image.extract_patches_2d(pat.data[0,:,:,z:z+30], patch_size)
-                train_patches1 = image.extract_patches_2d(pat.data[1,:,:,z:z+30], patch_size)
-                train_patches2 = image.extract_patches_2d(pat.data[2,:,:,z:z+30], patch_size)
-                train_patches3 = image.extract_patches_2d(pat.data[3,:,:,z:z+30], patch_size)
+                for ch in xrange(num_channels):
+                    tr_patches = image.extract_patches_2d(pat.data[ch,:,:,z:z+slice_batch], patch_size))
+                    tr_patches = np.transpose(train_patches,[3,0,1,2])
+                    tr_patches = np.reshape(train_patches,[num_patches*slice_batch,patch_size[0],patch_size[1]])
+
+                train_patches.append(tr_patches)
+
+                truth_patches = image.extract_patches_2d(pat.truth[:,:,z:z+slice_batch], patch_size)
+                truth_patches = np.transpose(train_patches,[3,0,1,2])
+                truth_patches = np.reshape(train_patches,[num_patches*slice_batch,patch_size[0],patch_size[1]])                
                 
-                truth_patches = image.extract_patches_2d(pat.truth[:,:,z:z+30], patch_size)
-                
-                patches_truth = np.zeros([num_patches,30])
-                
-                for iz in xrange(30):
-                    for p in xrange(num_patches):
-                        patches_truth[p,iz] = truth_patches[p,(patch_size[0]-1)/2, (patch_size[0]-1)/2,iz]
-                          
-                for nz in range(30):
+                patches_truth = np.zeros([num_patches*slice_batch])
+                for i in xrange(num_patches*slice_batch):
+                        patches_truth[i] = truth_patches[i,(patch_size[0]-1)/2, (patch_size[0]-1)/2]
+                    
+                shared_data.set_value(numpy.asarray(train_patches,dtype = theano.config.floatX))
+                shared_truth.set_value(numpy.asarray(patches_truth,dtype = 'int32'))
+      
+                for nz in range(slice_batch):
                     print ('Training: epoch: %i, patient: %i, time stamp: %i, slice: %i\n' %(epoch,pat_idx+1,index+1,z+nz))
-                    shared_data.set_value(numpy.asarray([train_patches0[:,:,:,nz],train_patches1[:,:,:,nz],train_patches2[:,:,:,nz],train_patches3[:,:,:,nz]],dtype = theano.config.floatX))
-                    shared_truth.set_value(numpy.asarray(patches_truth[:,nz],dtype = 'int32'))
-                    cost_ij = train_model()
+                    cost_ij = train_model(nz)
                 
-                z = z + 30
+                z = z + slice_batch
                 logcost.append(cost_ij)
 
                 if (iter + 1) % validation_frequency == 0:
