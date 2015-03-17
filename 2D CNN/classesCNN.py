@@ -1,3 +1,9 @@
+import theano
+import theano.tensor as T
+import numpy
+from theano.tensor.signal import downsample
+from theano.tensor.nnet import conv
+
 class ConvPoolLayer(object):
     
     def __init__(self, rng, input, filter_shape, image_shape, poolsize=(2, 2)):
@@ -51,7 +57,7 @@ class ConvPoolLayer(object):
         pooled_out = downsample.max_pool_2d(
             input=conv_out,
             ds=poolsize,
-            ignore_border=True
+            ignore_border=False
         )
 
         self.output = T.tanh(pooled_out + self.b.dimshuffle('x', 0, 'x', 'x'))

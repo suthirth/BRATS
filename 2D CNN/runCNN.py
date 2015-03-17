@@ -1,7 +1,9 @@
 import os
+import time
 from time import gmtime, strftime
 
 import numpy as np
+import numpy
 import cPickle
 
 import theano
@@ -11,23 +13,24 @@ from theano.tensor.nnet import conv
 
 from classesCNN import ConvPoolLayer, HiddenLayer, LogisticRegression
 
-import readPatMS as ReadPat
+import readPatMS
 
 #####################
 #Training Parameters
 
 learning_rate=0.0001
 n_epochs=200
-nkerns=[20, 30, 50, 3] 
-num_patches=500
+nkerns=[2, 3, 5, 8] 
 
 #####################
 #Load Datasets
 
 num_channels = 4
-img_shape = [171,216,171]
+img_shape = [181,217,181]
 num_patients = 4
-Tstamps = [4,4,5,4]
+TStamps = [4,4,5,4]
+
+patch_size = [19,19]
 
 valid_pat_num = 5
 valid_Tstamps = 4
@@ -35,41 +38,21 @@ valid_Tstamps = 4
 test_pat_num = 1
 test_Tstamp = 1
 
-tr_data = numpy.zeros(Tstamps[0],num_channels,img_shape[0],img_shape[1],img_shape[2])
-tr_truth = numpy.zeros(Tstamps[0],img_shape[0],img_shape[1],img_shape[2])
-for t in range(0,Tstamps[0]):
-    pat = ReadPat.new(1,t+1)
-    tr_data[t,:,:,:,:] = pat.data
-    tr_truth[t,:,:,:] = pat.truth
-train_data = theano.shared(numpy.asarray(tr_data,dtype = theano.config.floatX),borrow = True)
-train_truth = theano.shared(numpy.asarray(tr_truth,dtype = 'int32'),borrow = True)
+num_batches = patch_size[0]*patch_size[1]
+num_patches = [int(img_shape[i]/patch_size[i])-1 for i in range(2)]
 
-v_data = numpy.zeros(valid_Tstamps,num_channels,img_shape[0],img_shape[1],img_shape[2])
-v_truth = numpy.zeros(valid_Tstamps,img_shape[0],img_shape[1],img_shape[2])
-for t in range(0,valid_Tstamps):
-    vpat = ReadPat.new(valid_pat_num,t+1)
-    v_data[t,:,:,:,:] = vpat.data
-    v_truth[t,:,:,:] = vpat.truth
-valid_data = theano.shared(numpy.asarray(v_data,dtype = theano.config.floatX),borrow = True)
-valid_truth = theano.shared(numpy.asarray(pat.truth,dtype = 'int32'),borrow = True)
+train_patches = np.zeros([num_batches, num_patches[0]*num_patches[1], num_channels, patch_size[0], patch_size[1]])
+trpatches_truth = np.zeros([num_batches, num_patches[0]*num_patches[1]])
 
-tpat = ReadPat.new(test_pat_num,test_Tstamp)
-test_data = theano.shared(numpy.asarray(tpat.data,dtype = theano.config.floatX),borrow = True)
-test_truth = theano.shared(numpy.asarray(tpat.truth,dtype = 'int32'),borrow = True)
-
-#Patch Parameters
-patch_size = [19,19]
+shared_data = theano.shared(numpy.asarray(train_patches,dtype = theano.config.floatX),borrow = True)
+shared_truth = theano.shared(numpy.asarray(trpatches_truth,dtype = 'int32'),borrow = True)
 
 rng = numpy.random.RandomState(23455)
 
 
 #Define Theano Tensors
-off_x = T.lscalar()
-off_y = T.lscalar()
-time_idx = T.lscalar()
-slice_id = T.lscalar()
-
-x = T.ftensor3('x')  
+n_batch = T.lscalar()
+x = T.ftensor4('x')  
 y = T.ivector('y')  
 
 ######################
@@ -77,13 +60,10 @@ y = T.ivector('y')
 ######################
 print '... building the model'
 
-#(num_channels,x,y,patches) -> (patches,num_channels,x,y)
-layer0_input = x.dimshuffle(3,0,1,2)
-
 layer0 = ConvPoolLayer(
     rng,
-    input=layer0_input,
-    img_shape=(num_patches, num_channels, 19, 19),
+    input=x,
+    image_shape=(num_patches[0]*num_patches[1], num_channels, 19, 19),
     filter_shape=(nkerns[0], num_channels, 5, 5),
     poolsize=(2, 2)
 )
@@ -91,7 +71,7 @@ layer0 = ConvPoolLayer(
 layer1 = ConvPoolLayer(
     rng,
     input=layer0.output,
-    img_shape=(num_patches, nkerns[0], 8, 8),
+    image_shape=(num_patches[0]*num_patches[1], nkerns[0], 8, 8),
     filter_shape=(nkerns[1], nkerns[0], 5, 5),
     poolsize=(2, 2)
 )
@@ -111,39 +91,18 @@ layer3 = LogisticRegression(input=layer2.output, n_in=nkerns[2], n_out=nkerns[3]
 cost = layer3.negative_log_likelihood(y)
 
 test_model = theano.function(
-    [off_x, off_y, slice_id],
+    [n_batch],
     layer3.y_pred,
     givens={
-        x: T.concatenate[test_data[:, 
-                        off_x + ix*patch_size[0]: off_x + (ix+1)*patch_size[0],
-                        off_y + iy*patch_size[1]: off_y + (iy+1)*patch_size[1],
-                        slice_id] for ix,iy in zip(range((off_x + img_shape[0])/ patch_size[0]),range((off_y + img_shape[1])/patch_size[1])), axis = 3],
-        y: T.concatenate[test_truth[
-                        off_x + ix*patch_size[0] + (patch_size[0]-1)/2,
-                        off_y + iy*patch_size[1] + (patch_size[1]-1)/2,
-                        slice_id
-                        ] for ix,iy in zip(range((off_x + img_shape[0])/ patch_size[0]),
-                                        range((off_y + img_shape[1])/patch_size[1])), axis = 1]
-    }
+        x: shared_data[n_batch,:,:,:,:]}
 )
 
 validate_model = theano.function(
-    [time_idx,off_x,off_y,slice_id],
+    [n_batch],
     layer3.errors(y),
     givens={
-    x: T.concatenate[valid_data[time_idx, :, 
-                        off_x + ix*patch_size[0]: off_x + (ix+1)*patch_size[0],
-                        off_y + iy*patch_size[1]: off_y + (iy+1)*patch_size[1],
-                        slice_id
-                        ] for ix,iy in zip(range((off_x + img_shape[0])/ patch_size[0]),
-                                        range((off_y + img_shape[1])/patch_size[1])), axis = 3],
-    y: T.concatenate[valid_truth[time_idx,
-                        off_x + ix*patch_size[0] + (patch_size[0]-1)/2,
-                        off_y + iy*patch_size[1] + (patch_size[1]-1)/2,
-                        slice_id
-                        ] for ix,iy in zip(range((off_x + img_shape[0])/ patch_size[0]),
-                                        range((off_y + img_shape[1])/patch_size[1])), axis = 1]
-
+    x: shared_data[n_batch,:,:,:,:],
+    y: shared_truth[n_batch,:] 
     }
 )
 
@@ -156,25 +115,7 @@ updates = [
     for param_i, grad_i in zip(params, grads)
 ]
 
-train_model = theano.function(
-    [time_idx,off_x,off_y,slice_id],
-    cost,
-    updates=updates,
-    givens={
-        x: T.concatenate[train_data[time_idx, :, 
-                        off_x + ix*patch_size[0]: off_x + (ix+1)*patch_size[0],
-                        off_y + iy*patch_size[1]: off_y + (iy+1)*patch_size[1],
-                        slice_id
-                        ] for ix,iy in zip(range((off_x + img_shape[0])/ patch_size[0]),
-                                        range((off_y + img_shape[1])/patch_size[1])), axis = 3],
-        y: T.concatenate[train_truth[time_idx,
-                        off_x + ix*patch_size[0] + (patch_size[0]-1)/2,
-                        off_y + iy*patch_size[1] + (patch_size[1]-1)/2,
-                        slice_id
-                        ] for ix,iy in zip(range((off_x + img_shape[0])/ patch_size[0]),
-                                        range((off_y + img_shape[1])/patch_size[1])), axis = 1]
-    }
-)
+train_model = theano.function([n_batch], cost, updates=updates, givens={ x: shared_data[n_batch,:,:,:,:], y: shared_truth[n_batch,:] })
 
 # TRAIN MODEL #
 ###############
@@ -184,7 +125,7 @@ patience = 10000
 patience_increase = 2 
 improvement_threshold = 0.995 
 validation_frequency = 4000
-saving_frequncy = 5000
+saving_frequency = 5000
 
 best_validation_loss = numpy.inf
 best_iter = 0
@@ -197,91 +138,117 @@ done_looping = False
 while (epoch < n_epochs) and (not done_looping):
     epoch = epoch + 1
     iter = 0
-    pat_idx = 0
+    
     for pat_idx in xrange(num_patients):
         
-        data = numpy.zeros(TStamps[pat_idx],pat.data.shape[0], pat.data.shape[1],pat.data.shape[2],pat.data.shape[3]],dtype = theano.config.floatX)
-        truth = numpy.zeros(TStamps[pat_idx],pat.truth.shape[0], pat.truth.shape[1],pat.truth.shape[2]],dtype = 'int32')
-        
         for index in xrange(TStamps[pat_idx]):
-            pat = ReadPatMS.new(pat_idx+1,index+1)
-            data[index,:,:,:,:] = numpy.asarray(pat.data,dtype = theano.config.floatX)
-            truth[index,:,:,:] = numpy.asarray(pat.truth,dtype = 'int32')
-
-        train_patches = np.zeros()
-
-
-        for index in xrange(TStamps[pat_idx]):
-            for z in img_shape[2]:
-                    for off_x in patch_size[0]:
-                        for off_y in patch_size[1]:
-                            num_patches = [(off_x + img_shape[0])/ patch_size[0]), (off_y + img_shape[1])/patch_size[1]]
-                            train_patches.append([data[index,:,
-                                            off_x + ix*patch_size[0]: off_x + (ix+1)*patch_size[0],
-                                            off_y + iy*patch_size[1]: off_y + (iy+1)*patch_size[1],
-                                            z] for ix, iy, off_x ,off_y, z, t_index in zip(range(num_patches[0]),range(num_patches[1]))])
-                            train_trpatches = [data[index,
-                                            off_x + ix*patch_size[0] + (patch_size[0]-1)/2,
-                                            off_y + iy*patch_size[1] + (patch_size[1]-1)/2,
-                                            z] for ix,iy in zip(range(num_patches[0]),range(num_patches[1]))]
-        
-        train_data.set_value(train_patches)
-        train_truth.set_value(train_trpatches)
-
-        t_idx = 0
-        for t_idx in Tstamps[pat_idx]:
-            print ('Training: epoch: %i, patient: %i, time stamp: %i \n' %(epoch+1,pat_idx+1,t_idx+1))
             
+            print ('Training: epoch: %i, patient: %i, time stamp: %i\n' %(epoch,pat_idx+1,index+1))
+            
+            pat = readPatMS.new(pat_idx+1,index+1)
+
+            pat_data = numpy.asarray(pat.data,dtype = theano.config.floatX)
+            pat_truth = numpy.asarray(pat.truth,dtype = 'int32')
+
+            # One batch -> 80+ patches from slice where stride = patch_len
             for z in xrange(img_shape[2]):
+
+                num_batches = patch_size[0]*patch_size[1]
+                num_patches = [int(img_shape[i]/patch_size[i])-1 for i in range(2)]
+                train_patches = np.zeros([num_batches, num_patches[0]*num_patches[1], num_channels, patch_size[0], patch_size[1]])
+                trpatches_truth = np.zeros([num_batches, num_patches[0]*num_patches[1]])
                 
+                i = 0 
                 for off_x in xrange(patch_size[0]):
-                    
                     for off_y in xrange(patch_size[1]):
+                        train_patches[i,:,:,:,:] = [pat_data[:,
+                                        off_x + ix*patch_size[0]: off_x + (ix+1)*patch_size[0],
+                                        off_y + iy*patch_size[1]: off_y + (iy+1)*patch_size[1],
+                                        z] for ix in range(num_patches[0]) for iy in range(num_patches[1])]
+                        trpatches_truth[i,:] = [pat_truth[
+                                        off_x + ix*patch_size[0] + (patch_size[0]-1)/2,
+                                        off_y + iy*patch_size[1] + (patch_size[1]-1)/2,
+                                        z] for ix in range(num_patches[0]) for iy in range(num_patches[1])]
+                        i = i+1
+
+                shared_data.set_value(numpy.asarray(train_patches,dtype = theano.config.floatX))
+                shared_truth.set_value(numpy.asarray(trpatches_truth,dtype = 'int32'))
+                                     
+                for n_batch in xrange(patch_size[0]*patch_size[1]):
+                    
+                    cost_ij = train_model(n_batch)
+
+                    if (iter + 1) % validation_frequency == 0:
                         
-                        num_patches = [(img_shape[0]-off_x)/patch_size[0],(img_shape[1]-off_y)/patch_size[1]]
+                        validation_losses = []
+                        for vindex in xrange(valid_Tstamps): 
+               
+                            vpat = readPatMS.new(valid_pat_num,vindex+1)
 
-                        cost_ij = train_model(t_idx,off_x,off_y,z)
-
-                        if (iter + 1) % validation_frequency == 0:
+                            val_data = numpy.asarray(vpat.data,dtype = theano.config.floatX)
+                            val_truth = numpy.asarray(vpat.truth,dtype = 'int32')
 
                             # compute zero-one loss on validation set
-                            validation_losses = [validate_model(t,ox,oy,zz) for t in xrange(valid_Tstamps) 
-                                                                            for ox in xrange(patch_size[0]) 
-                                                                            for oy in xrange(patch_size[1]) 
-                                                                            for zz in range(image_size[2])]
-                            this_validation_loss = numpy.mean(validation_losses)
-                            print('Epoch %i, validation error %f %%' %
-                                  (epoch, this_validation_loss * 100.))
+                            for z in xrange(img_shape[2]):
 
-                            # if we got the best validation score until now
-                            if this_validation_loss < best_validation_loss:
-
-                                #improve patience if loss improvement is good enough
-                                if this_validation_loss < best_validation_loss *  \
-                                   improvement_threshold:
-                                    patience = max(patience, iter * patience_increase)
-
-                                # save best validation score and iteration number
-                                best_validation_loss = this_validation_loss
-                                best_iter = iter
-
-                        if (iter +1) % saving_frequency == 0:
-                            print 'Saving model...'
-                            save_file = file('CNNmodel.pkl', 'wb')
-                            for i in xrange(len(params)):
-                                cPickle.dump(params[i].get_value(borrow=True), save_file, protocol = cPickle.HIGHEST_PROTOCOL)    
-                            save_file.close()
+                                num_batches = patch_size[0]*patch_size[1]
+                                num_patches = [int(img_shape[i]/patch_size[i])-1 for i in range(2)]
+                                val_patches = np.zeros([num_batches, num_patches[0]*num_patches[1], num_channels, patch_size[0], patch_size[1]])
+                                val_ptruth = np.zeros([num_batches, num_patches[0]*num_patches[1]])
                             
-                            myfile = open("logcost.txt", "a") 
-                            for l in logcost:
-                                myfile.write("%f\n"%l)
-                            logcost = []
+                                i = 0 
+                                for off_x in xrange(patch_size[0]):
+                                    for off_y in xrange(patch_size[1]):
+                                        val_patches[i,:,:,:,:] = [val_data[:,
+                                                        off_x + ix*patch_size[0]: off_x + (ix+1)*patch_size[0],
+                                                        off_y + iy*patch_size[1]: off_y + (iy+1)*patch_size[1],
+                                                        z] for ix in range(num_patches[0]) for iy in range(num_patches[1])]
+                                        val_ptruth[i,:] = [val_truth[
+                                                        off_x + ix*patch_size[0] + (patch_size[0]-1)/2,
+                                                        off_y + iy*patch_size[1] + (patch_size[1]-1)/2,
+                                                        z] for ix in range(num_patches[0]) for iy in range(num_patches[1])]
+                                        i = i+1
 
-                        if patience <= iter:
-                            done_looping = True
-                            break
+                                
+                                shared_data.set_value(numpy.asarray(val_patches,dtype = theano.config.floatX))
+                                shared_truth.set_value(numpy.asarray(val_ptruth,dtype = 'int32'))
 
-                        iter = iter + 1
+                                for n in xrange(num_batches):
+                                    validation_losses.append(validate_model(n))
+                            
+                        this_validation_loss = numpy.mean(validation_losses)
+                        print('Epoch %i, validation error %f %%' %
+                              (epoch, this_validation_loss * 100.))
+
+                        # if we got the best validation score until now
+                        if this_validation_loss < best_validation_loss:
+
+                            #improve patience if loss improvement is good enough
+                            if this_validation_loss < best_validation_loss *  \
+                               improvement_threshold:
+                                patience = max(patience, iter * patience_increase)
+
+                            # save best validation score and iteration number
+                            best_validation_loss = this_validation_loss
+                            best_iter = iter
+
+                    if (iter +1) % saving_frequency == 0:
+                        print 'Saving model...'
+                        save_file = file('CNNmodel.pkl', 'wb')
+                        for i in xrange(len(params)):
+                            cPickle.dump(params[i].get_value(borrow=True), save_file, protocol = cPickle.HIGHEST_PROTOCOL)    
+                        save_file.close()
+                        
+                        myfile = open("logcost.txt", "a") 
+                        for l in logcost:
+                            myfile.write("%f\n"%l)
+                        logcost = []
+
+                    if patience <= iter:
+                        done_looping = True
+                        break
+
+                    iter = iter + 1
 
 
 end_time = time.clock()
@@ -298,11 +265,40 @@ print >> sys.stderr, ('The code for file ' +
 print "Prediction..."
 start_time = time.clock()
 
+pat = readPatMS.new(1,1)
+
+pat_data = numpy.asarray(pat.data,dtype = theano.config.floatX)
+pat_truth = numpy.asarray(pat.truth,dtype = 'int32')
+
+# One batch -> 80+ patches from slice where stride = patch_len
 Prediction = np.zeros(img_shape)
-z = 0
+num_batches = patch_size[0]*patch_size[1]
+num_patches = [int(img_shape[i]/patch_size[i])-1 for i in range(2)]
+
 for z in xrange(img_shape[2]):
-    pred_ij = test_model(t_idx,0,0,z)
-    Prediction[:,:,z] = pred_ij.reshape(img_shape[0],img_shape[1])
+
+    test_patches = np.zeros([num_batches, num_patches[0]*num_patches[1], num_channels, patch_size[0], patch_size[1]])
+    test_pred = np.zeros([num_batches, num_patches[0]*num_patches[1]])
+                
+    i = 0 
+    for off_x in xrange(patch_size[0]):
+        for off_y in xrange(patch_size[1]):
+            test_patches[i,:,:,:,:] = [pat_data[:,
+                            off_x + ix*patch_size[0]: off_x + (ix+1)*patch_size[0],
+                            off_y + iy*patch_size[1]: off_y + (iy+1)*patch_size[1],
+                            z] for ix in range(num_patches[0]) for iy in range(num_patches[1])]
+            i = i+1
+
+    shared_data.set_value(numpy.asarray(test_patches,dtype = theano.config.floatX))
+
+    for off_x in xrange(patch_size[0]):
+        for off_y in xrange(patch_size[1]):
+            pred = test_model(off_x*off_y + off_y)
+            for ix in range(num_patches[0]):
+                for iy in range(num_patches[1]):
+                    Prediction[off_x + ix*patch_size[0] + (patch_size[0]-1)/2,
+                        off_y + iy*patch_size[1] + (patch_size[1]-1)/2,
+                        z] = pred[ix*iy + iy] 
 
 end_time = time.clock()
 print >> sys.stderr, ('Prediction done and it took '+' %.2fm ' % ((end_time - start_time) / 60.))
