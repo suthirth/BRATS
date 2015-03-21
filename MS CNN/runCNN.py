@@ -1,14 +1,3 @@
-"""
-x = 16,36,56,76 
-
-
-x-16 : x
-x : x + plen-31 
-x + plen-31 : x+plen - 32 +16
-
-
-
-"""
 import os
 import sys
 import time
@@ -31,9 +20,13 @@ resumeTraining = False							# make this true to resume training from saved mode
 
 ############################################
 # General  Hyper-parameters
-learning_rate = 0.01 #e-04 				
+learning_rate = 0.01 #e-04
+momentum = 0.9 				
 n_epochs = 100
 saving_frequency = 1000
+validation_frequency = 
+patience = 
+improvement_threshold = 0.995
 
 #network parameters
 n_fmaps = (60,60,300,8)		#feature map description :
@@ -51,16 +44,19 @@ plen = 43
 offset = 16
 numPred = plen - offset + 1
 
-test_pat_num = 5
-test_tstamp = 2
 
 ############################################
 #Details pertaining to Multiple Sclerosis Dataset
 num_channels = 1
 num_patients = 4
-TStamps = (4,4,5,4)
+TStamps = (4,4,5,4,4)
 img_shape = (181,217,181)
 num_classes = 8
+
+valid_pat_num = 5
+
+test_pat_num = 5
+test_tstamp = 2
 
 ############################################
 #Initial Settings
@@ -71,7 +67,7 @@ rng = numpy.random.RandomState(23455)
 if(resumeTraining):
 	savedModel = file('CNNmodel','wb')
 	genVariables = cPickle.load(savedModel)
-	epoch,pat_idx,tim_idx,xi,yi,zi,itr = genVariables
+	epoch,pat_idx,tim_idx,xi,yi,zi,itr,patience,best_validation_loss = genVariables
 	layer3convW = cPickle.load(savedModel)
 	layer3convb = cPickle.load(savedModel)
 	layer2convW = cPickle.load(savedModel)
@@ -82,7 +78,7 @@ if(resumeTraining):
 	layer0convb = cPickle.load(savedModel)
 	
 else:
-	epoch,pat_idx,tim_idx,xi,yi,zi,itr = [0,0,0,0,0,0,0]
+	epoch,pat_idx,tim_idx,xi,yi,zi,itr,patience,best_validation_loss = [0,0,0,0,0,0,0,patience,numpy.inf]
 	layer3convW = None
 	layer3convb = None
 	layer2convW = None
@@ -100,12 +96,8 @@ for ix in xrange(TStamps[0]):
 	pat = ReadPat.new(1,ix+1,num_channels)
 	data[ix,:,:,:,:] = pat.data
 	truth[ix,:,:,:] = pat.truth
-train_data = theano.shared(numpy.asarray(data,dtype = theano.config.floatX),borrow = True)
-train_truth = theano.shared(numpy.asarray(truth,dtype = 'int32'),borrow = True)
-
-tpat = ReadPat.new(test_pat_num,test_tstamp,num_channels)
-test_data = theano.shared(numpy.asarray(tpat.data,dtype = theano.config.floatX),borrow = True)
-test_truth = theano.shared(numpy.asarray(tpat.truth,dtype = 'int32'),borrow = True)
+shared_data = theano.shared(numpy.asarray(data,dtype = theano.config.floatX),borrow = True)
+shared_truth = theano.shared(numpy.asarray(truth,dtype = 'int32'),borrow = True)
 
 shape = tpat.truth.shape
 Prediction = numpy.zeros(shape)
@@ -175,21 +167,24 @@ layer3conv = ConvLayer(rng,
 				   softmax = 1)
 newlen = layer2conv.outputlen
 
-cost = layer3conv.negative_log_likelihood(y)
+cost = layer3conv.negative_log_likelihood(y) + 0.1 * T.sum(param ** 2)
 
 test_model = theano.function(inputs = [idx,idy,idz],
 							outputs = [layer3conv.errors(y),layer3conv.p_y_given_x,layer3conv.y_pred], 
-							givens = {x: test_data[0:num_channels,idx:idx+plen,idy:idy+plen,idz:idz+plen],
-							z: test_truth[idx+offset/2:idx+plen-offset/2 +1, idy+offset/2:idy+plen-offset/2 +1,idz+offset/2:idz+plen-offset/2 +1]})
+							givens = {x: shared_data[0:num_channels,idx:idx+plen,idy:idy+plen,idz:idz+plen],
+							z: shared_truth[idx+offset/2:idx+plen-offset/2 +1, idy+offset/2:idy+plen-offset/2 +1,idz+offset/2:idz+plen-offset/2 +1]})
+
+valid_model = theano.function([time_idx,idx,idy,idz],layer3conv.errors(y),givens = {x: shared_data[time_idx,0:num_channels,idx:idx+plen,idy:idy+plen,idz:idz+plen],
+							z: shared_truth[idx+offset/2:idx+plen-offset/2 +1, idy+offset/2:idy+plen-offset/2 +1,idz+offset/2:idz+plen-offset/2 +1]})
 
 params = layer3conv.params + layer2conv.params + layer1conv.params + layer0conv.params
 masks = layer3conv.masks + layer2conv.masks + layer1conv.masks + layer0conv.masks
 grads = T.grad(cost,params)
 #update only sparse elements
-updates = [(param_i,param_i-learning_rate*grad_i*mask_i) for param_i,grad_i,mask_i in zip(params,grads,masks)]
+updates = gradient_updates_momentum(cost, params, grads, masks, learning_rate, momentum)
 train_model = theano.function([time_idx,idx,idy,idz],cost,updates = updates, 
-							   givens = {x: train_data[time_idx,0:num_channels,idx:idx+plen,idy:idy+plen,idz:idz+plen],
-										 z: train_truth[time_idx,idx+offset/2:idx+plen-offset/2 +1, idy+offset/2:idy+plen-offset/2 +1,idz+offset/2:idz+plen-offset/2 +1]})
+							   givens = {x: shared_data[time_idx,0:num_channels,idx:idx+plen,idy:idy+plen,idz:idz+plen],
+										 z: shared_truth[time_idx,idx+offset/2:idx+plen-offset/2 +1, idy+offset/2:idy+plen-offset/2 +1,idz+offset/2:idz+plen-offset/2 +1]})
 
 ############################################
 
@@ -213,13 +208,83 @@ localtime = time.asctime( time.localtime(time.time()) )
 print "Start time is :", localtime
 start_time  = time.clock()
 
-myfile = open("logcost.txt", "a")           #File Name should be changed for every new run
-    						
+myfile = open("logcost.txt", "a")           #File Name should be changed for every new run   						
 logcost = []
+
+def load_shareddata(pat_idx):
+	data = numpy.zeros(TStamps[pat_idx],num_channels, img_shape[0],img_shape[1],img_shape[2]],dtype = theano.config.floatX)
+	truth = numpy.zeros(TStamps[pat_idx],img_shape[0], img_shape[1],img_shape[2]],dtype = 'int32')
+	for index in xrange(TStamps[pat_idx]):
+		pat = ReadPat.new(pat_idx+1,index+1,num_channels)
+		data[index,:,:,:,:] = numpy.asarray(pat.data,dtype = theano.config.floatX)
+		truth[index,:,:,:] = numpy.asarray(pat.truth,dtype = 'int32')				
+	shared_data.set_value(data)
+	truth_truth.set_value(truth)
+
+def validate_model():
+	validation losses = []
+	load_shareddata(valid_pat_num)
+	for tim_idx in xrange(valid_TStamps):
+		print ('Validating... patient: %i, time stamp: %i\n' %pat_idx,tim_idx+1)	
+		for xi in xrange(len(xvalues)):
+			for yi in xrange(len(yvalues))
+				for zi in xrange(len(zvalues)):
+					validation_losses.append(valid_model(tim_idx,xvalues[xi],yvalues[yi],zvalues[zi]))
+
+	print np.mean(validation_losses)
+	return np.mean(validation_losses)
+
+def save_model_and_predict():
+	print 'Saving model...'
+	save_file = file('CNNmodel.pkl', 'wb')
+	genVariables = [epoch,pat_idx,tim_idx,xi,yi,zi+numPred,itr+1,patience,best_validation_loss]
+	cPickle.dump(genVariables,save_file,protocol = cPickle.HIGHEST_PROTOCOL) 
+	for i in xrange(len(params)):
+		cPickle.dump(params[i].get_value(borrow=True), save_file, protocol = cPickle.HIGHEST_PROTOCOL)    
+	save_file.close()
+	for l in logcost:
+		myfile.write("%f\n"%l)
+	logcost = []
+
+	print('Predicting for test patient')
+	
+	tpat = ReadPat.new(test_pat_num,test_tstamp,num_channels)
+	shared_data.set_value(numpy.asarray(tpat.data,dtype = theano.config.floatX),borrow = True)
+	shared_truth.set_values(numpy.asarray(tpat.truth,dtype = 'int32'),borrow = True)
+
+	pstart_time = time.clock()
+	Prediction = numpy.zeros(img_shape)
+
+	for ix in xrange(len(xvalues)):
+		for iy in xrange(len(yvalues)):
+				for iz in xrange(len(zvalues)):
+					errors,p_y_given_x,pred = test_model(xvalues[ix],yvalues[iy],zvalues[iz])
+					pred = pred.reshape([numPred,numPred,numPred])
+					Prediction[xvalues[ix]+offset/2:xvalues[ix]+plen-offset/2 +1,
+							   yvalues[iy]+offset/2:yvalues[iy]+plen-offset/2 +1,
+							   zvalues[iz]+offset/2:zvalues[iz]+plen-offset/2 +1] = pred
+					p_y_given_x = p_y_given_x.transpose(1,0).reshape([num_classes,numPred,numPred,numPred])
+					PostProbs[:,xvalues[ix]+offset/2:xvalues[ix]+plen-offset/2 +1,
+							   	yvalues[iy]+offset/2:yvalues[iy]+plen-offset/2 +1,
+							   	zvalues[iz]+offset/2:zvalues[iz]+plen-offset/2 +1] = p_y_given_x
+
+	pend_time = time.clock()
+	print >> sys.stderr, ('Prediction done and it took '+' %.2fm ' % ((pend_time - pstart_time) / 60.))
+	#output nii file
+	affine = [[-1,0,0,0],[0,-1,0,0],[0,0,1,0],[0,0,0,1]]
+	img = nib.Nifti1Image(Prediction, affine)
+	img.set_data_dtype(numpy.int32)
+	nib.save(img,'prediction.nii')
+	for ix in numpy.arange(num_classes):
+		img = nib.Nifti1Image(PostProbs[ix],affine)
+		img.set_data_dtype(numpy.float32)
+		nib.save(img,'postprobs' + str(ix+1) + '.nii')					
+
 while(epoch < n_epochs) and (not done_looping):
 	if(not resumeTraining):
 		pat_idx = 0
 	while(pat_idx < num_patients):
+		load_shareddata(pat_idx)
 		if(not resumeTraining):
 			tim_idx = 0
 		while(tim_idx < TStamps[pat_idx]):
@@ -242,62 +307,25 @@ while(epoch < n_epochs) and (not done_looping):
 						if itr % 100 == 0 :
 							print 'Iteration: %i ' % (itr) 
 
+						if (itr%validation_frequency == 0):
+							this_validation_loss = validate_model()
+
+							if this_validation_loss < best_validation_loss:
+								if this_validation_loss < best_validation_loss * improvement_threshold:
+									patience = max(patience, itr*patience_increase)
+
+								best_validation_loss = this_validation_loss
+							load_shareddata(pat_idx) #reload train data to memory
+
 						if(itr%saving_frequency == 0):
-							print 'Saving model...'
-							save_file = file('CNNmodel.pkl', 'wb')
-							genVariables = [epoch,pat_idx,tim_idx,xi,yi,zi+numPred,itr+1]
-							cPickle.dump(genVariables,save_file,protocol = cPickle.HIGHEST_PROTOCOL) 
-							for i in xrange(len(params)):
-								cPickle.dump(params[i].get_value(borrow=True), save_file, protocol = cPickle.HIGHEST_PROTOCOL)    
-							save_file.close()
-							for l in logcost:
-								myfile.write("%f\n"%l)
-							logcost = []
-
-							print('Predicting for test patient')
-							pstart_time = time.clock()
-							Prediction = numpy.zeros(img_shape)
-
-							for ix in xrange(len(xvalues)):
-								for iy in xrange(len(yvalues)):
-										for iz in xrange(len(zvalues)):
-											errors,p_y_given_x,pred = test_model(xvalues[ix],yvalues[iy],zvalues[iz])
-											pred = pred.reshape([numPred,numPred,numPred])
-											Prediction[xvalues[ix]+offset/2:xvalues[ix]+plen-offset/2 +1,
-													   yvalues[iy]+offset/2:yvalues[iy]+plen-offset/2 +1,
-													   zvalues[iz]+offset/2:zvalues[iz]+plen-offset/2 +1] = pred
-											p_y_given_x = p_y_given_x.transpose(1,0).reshape([num_classes,numPred,numPred,numPred])
-											PostProbs[:,xvalues[ix]+offset/2:xvalues[ix]+plen-offset/2 +1,
-													   	yvalues[iy]+offset/2:yvalues[iy]+plen-offset/2 +1,
-													   	zvalues[iz]+offset/2:zvalues[iz]+plen-offset/2 +1] = p_y_given_x
-
-							pend_time = time.clock()
-							print >> sys.stderr, ('Prediction done and it took '+' %.2fm ' % ((pend_time - pstart_time) / 60.))
-							#output nii file
-							affine = [[-1,0,0,0],[0,-1,0,0],[0,0,1,0],[0,0,0,1]]
-							img = nib.Nifti1Image(Prediction, affine)
-							img.set_data_dtype(numpy.int32)
-							nib.save(img,'prediction.nii')
-							for ix in numpy.arange(num_classes):
-								img = nib.Nifti1Image(PostProbs[ix],affine)
-								img.set_data_dtype(numpy.float32)
-								nib.save(img,'postprobs' + str(ix+1) + '.nii')					
+							save_model_and_predict()
+							load_shareddata(pat_idx) #reload train data to memory
 
 						zi = zi + 1
 					yi = yi + 1
 				xi = xi + 1			
 			tim_idx = tim_idx + 1	
 		pat_idx = pat_idx + 1					
-		if(pat_idx < num_patients):
-			data = numpy.zeros([numpy.max(TStamps),num_channels, img_shape[0],img_shape[1],img_shape[2]],dtype = theano.config.floatX)
-			truth = numpy.zeros([numpy.max(TStamps),img_shape[0], img_shape[1],img_shape[2]],dtype = 'int32')
-			for index in xrange(TStamps[pat_idx]):
-				pat = ReadPat.new(pat_idx+1,index+1,num_channels)
-				data[index,:,:,:,:] = numpy.asarray(pat.data,dtype = theano.config.floatX)
-				truth[index,:,:,:] = numpy.asarray(pat.truth,dtype = 'int32')				
-			train_data.set_value(data)
-			train_truth.set_value(truth)
-		
 	epoch = epoch + 1			
 
 end_time = time.clock()
@@ -306,29 +334,5 @@ localtime = time.asctime( time.localtime(time.time()) )
 print "End time is :", localtime
 print >> sys.stderr, ('Training took '+' %.2fm ' % ((end_time - start_time) / 60.))
 
-# Save model to file after whole optimization is done
-save_file = file('FinalModel.pkl', 'wb')
-for i in xrange(len(params)):
-	cPickle.dump(params[i].get_value(borrow=True), save_file, protocol = cPickle.HIGHEST_PROTOCOL)    
-save_file.close()
-
-print('Predicting for test patient')
-start_time = time.clock()
-Prediction = numpy.zeros(img_shape)
-
-for ix in xrange(len(xvalues)):
-	for iy in xrange(len(yvalues)):
-			for iz in xrange(len(zvalues)):
-				errors,pred = test_model(xvalues[ix],yvalues[iy],zvalues[iz])
-				pred = pred.reshape([numPred,numPred,numPred])
-				Prediction[xvalues[ix]+offset/2:xvalues[ix]+plen-offset/2 +1,
-						   yvalues[iy]+offset/2:yvalues[iy]+plen-offset/2 +1,
-						   zvalues[iz]+offset/2:zvalues[iz]+plen-offset/2 +1] = pred
-
-end_time = time.clock()
-print >> sys.stderr, ('Prediction done and it took '+' %.2fm ' % ((end_time - start_time) / 60.))
-#output nii file
-affine = [[-1,0,0,0],[0,-1,0,0],[0,0,1,0],[0,0,0,1]]
-img = nib.Nifti1Image(Prediction, affine)
-img.set_data_dtype(numpy.int32)
-nib.save(img,'finalprediction.nii')
+#Save model and predict 
+save_model_and_predict()

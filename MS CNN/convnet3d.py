@@ -113,4 +113,24 @@ class PoolLayer(object):
                 self.outputlen = (image_shape[2] - len(x) + 1,
                                   image_shape[3] - len(y) + 1,
                                   image_shape[4] - len(z) + 1)
-                self.output = avg_out                
+                self.output = avg_out
+
+def gradient_updates_momentum(cost, params, grads, masks, learning_rate, momentum):
+
+    # Make sure momentum is a sane value
+    assert momentum < 1 and momentum >= 0
+    # List of update steps for each parameter
+    updates = []
+    # Just gradient descent on cost
+    for param,grad,mask in zip(params,grads,masks):
+        # For each parameter, we'll create a param_update shared variable.
+        # This variable will keep track of the parameter's update step across iterations.
+        # We initialize it to 0
+        param_update = theano.shared(param.get_value()*0., broadcastable=param.broadcastable)
+        # Each parameter is updated by taking a step in the direction of the gradient.
+        # However, we also "mix in" the previous step according to the given momentum value.
+        # Note that when updating param_update, we are using its old value and also the new gradient step.
+        updates.append((param, param - learning_rate*param_update))
+        # Note that we don't need to derive backpropagation to compute updates - just use T.grad!
+        updates.append((param_update, momentum*param_update + (1. - momentum)*T.grad(cost, param)*mask))
+    return updates
