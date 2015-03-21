@@ -22,7 +22,7 @@ import readPatMS
 #####################
 #Training Parameters
 
-learning_rate=0.0001
+learning_rate=0.001
 n_epochs=30
 nkerns=[40, 50, 200, 8] 
 
@@ -99,9 +99,6 @@ cost = layer3.negative_log_likelihood(y)
 
 test_model = theano.function([], layer3.y_pred, givens={ x: shared_data})
 
-validate_model = theano.function([nz], layer3.errors(y), givens={x: shared_data[:,nz*num_patches:(nz+1)*num_patches,:,:], 
-                                                                y: shared_truth[nz*num_patches:(nz+1)*num_patches]})
-
 params = layer3.params + layer2.params + layer1.params + layer0.params
 
 grads = T.grad(cost, params)
@@ -115,7 +112,7 @@ train_model = theano.function([nz], cost, updates=updates, givens={ x: shared_da
 ###############
 print '... training'
 
-saving_frequency = 150
+saving_frequency = 250
 
 start_time = time.clock()
 
@@ -123,9 +120,9 @@ epoch = 0
 
 logcost = []
 
+iter = 0
 while (epoch < n_epochs):
     epoch = epoch + 1
-    iter = 0
     
     for pat_idx in xrange(num_patients):
         
@@ -136,7 +133,7 @@ while (epoch < n_epochs):
             # Each batch -> 32k patches from each slice
             z = 11
 
-            slice_batch = 35
+            slice_batch = 10
 
             while z < 151:
 
@@ -144,7 +141,7 @@ while (epoch < n_epochs):
                 print "... preparing patches"
 
                 for ch in xrange(num_channels):
-		    tr_patches = image.extract_patches_2d(pat.data[ch,20:160,17:192,z:z+slice_batch], patch_size)
+                    tr_patches = image.extract_patches_2d(pat.data[ch,20:160,17:192,z:z+slice_batch], patch_size)
                     tr_patches = np.transpose(tr_patches,[3,0,1,2])
                     tr_patches = np.reshape(tr_patches,[num_patches*slice_batch,patch_size[0],patch_size[1]])
                     train_patches.append(tr_patches)
@@ -159,9 +156,10 @@ while (epoch < n_epochs):
                     
                 shared_data.set_value(numpy.asarray(train_patches,dtype = theano.config.floatX))
                 shared_truth.set_value(numpy.asarray(patches_truth,dtype = 'int32'))
+
+                print ('Training: epoch: %i, patient: %i, time stamp: %i, slice: %i:%i\n' %(epoch,pat_idx+1,index+1,z,z+slice_batch))
       
                 for nz in range(slice_batch):
-                    print ('Training: epoch: %i, patient: %i, time stamp: %i, slice: %i\n' %(epoch,pat_idx+1,index+1,z+nz))
                     cost_ij = train_model(nz)
                 
                 z = z + slice_batch
@@ -186,14 +184,10 @@ while (epoch < n_epochs):
 
                     for z in xrange(11,151):
                         print 'Predicting... slice:',(60+z)
-                        Pred = []
                         tr_patches = np.asarray([image.extract_patches_2d(pat.data[ch,20:160,17:192,z], patch_size) for ch in xrange(num_channels)])
                         shared_data.set_value(numpy.asarray(tr_patches[:,0:num_patches,:,:],dtype = theano.config.floatX))
-                        p1 = test_model() 
-                        shared_data.set_value(numpy.asarray(tr_patches[:,num_patches:num_patches*2,:,:],dtype = theano.config.floatX))
-                        p2 = test_model()
-                        Pred = np.append(p1,p2)
-                        Prediction[:,:,z] = np.reshape(np.asarray(Pred),[122,157])
+                        Pred = test_model() 
+                        Prediction[:,:,(z-11)] = np.reshape(np.asarray(Pred),[122,157])
 
                     #output nii file
                     affine = [[-1,0,0,0],[0,-1,0,0],[0,0,1,0],[0,0,0,1]]
